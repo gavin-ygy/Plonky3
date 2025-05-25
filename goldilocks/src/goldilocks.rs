@@ -16,7 +16,7 @@ use p3_field::{
 };
 use p3_util::{assume, branch_hint, flatten_to_base};
 use rand::Rng;
-use rand::distr::{Distribution, StandardUniform};
+use rand::distributions::{Distribution, Standard};
 use serde::{Deserialize, Serialize};
 
 /// The Goldilocks prime
@@ -135,7 +135,7 @@ impl Debug for Goldilocks {
     }
 }
 
-impl Distribution<Goldilocks> for StandardUniform {
+impl Distribution<Goldilocks> for Standard {
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Goldilocks {
         loop {
             let next_u64 = rng.next_u64();

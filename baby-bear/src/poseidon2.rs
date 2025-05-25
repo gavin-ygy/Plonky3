@@ -19,6 +19,8 @@ use p3_monty_31::{
     MontyField31, Poseidon2ExternalLayerMonty31, Poseidon2InternalLayerMonty31,
 };
 use p3_poseidon2::{ExternalLayerConstants, Poseidon2};
+use serde::{Deserialize, Serialize};
+
 
 use crate::{BabyBear, BabyBearParameters};
 
@@ -61,7 +63,7 @@ pub type GenericPoseidon2LinearLayersBabyBear =
 
 /// The vector `[-2, 1, 2, 1/2, 3, 4, -1/2, -3, -4, 1/2^8, 1/4, 1/8, 1/2^27, -1/2^8, -1/16, -1/2^27]`
 /// saved as an array of BabyBear elements.
-const INTERNAL_DIAG_MONTY_16: [BabyBear; 16] = BabyBear::new_array([
+pub const INTERNAL_DIAG_MONTY_16: [BabyBear; 16] = BabyBear::new_array([
     BabyBear::ORDER_U32 - 2,
     1,
     2,
@@ -80,9 +82,11 @@ const INTERNAL_DIAG_MONTY_16: [BabyBear; 16] = BabyBear::new_array([
     15,
 ]);
 
+pub const MONTY_INVERSE: BabyBear = BabyBear::new(943718400);
+
 /// The vector [-2, 1, 2, 1/2, 3, 4, -1/2, -3, -4, 1/2^8, 1/4, 1/8, 1/16, 1/2^7, 1/2^9, 1/2^27, -1/2^8, -1/4, -1/8, -1/16, -1/32, -1/64, -1/2^7, -1/2^27]
 /// saved as an array of BabyBear elements.
-const INTERNAL_DIAG_MONTY_24: [BabyBear; 24] = BabyBear::new_array([
+pub const INTERNAL_DIAG_MONTY_24: [BabyBear; 24] = BabyBear::new_array([
     BabyBear::ORDER_U32 - 2,
     1,
     2,
@@ -265,7 +269,7 @@ pub fn default_babybear_poseidon2_24() -> Poseidon2BabyBear<24> {
 }
 
 /// Contains data needed to define the internal layers of the Poseidon2 permutation.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct BabyBearInternalLayerParameters;
 
 impl InternalLayerBaseParameters<BabyBearParameters, 16> for BabyBearInternalLayerParameters {
@@ -313,7 +317,6 @@ impl InternalLayerBaseParameters<BabyBearParameters, 16> for BabyBearInternalLay
         state[0] = part_sum - state[0].clone();
         state[1] = full_sum.clone() + state[1].clone();
         state[2] = full_sum.clone() + state[2].double();
-
         // For the remaining elements we use multiplication.
         // This could probably be improved slightly by making use of the
         // mul_2exp_u64 and div_2exp_u64 but this would involve porting div_2exp_u64 to PrimeCharacteristicRing.
@@ -410,6 +413,7 @@ mod tests {
     use p3_symmetric::Permutation;
     use rand::{Rng, SeedableRng};
     use rand_xoshiro::Xoroshiro128Plus;
+    use core::array;
 
     use super::*;
 
@@ -475,8 +479,9 @@ mod tests {
     /// for a random input of width 16.
     #[test]
     fn test_generic_internal_linear_layer_16() {
-        let mut rng = Xoroshiro128Plus::seed_from_u64(1);
-        let mut input1: [F; 16] = rng.random();
+        //let mut rng = Xoroshiro128Plus::seed_from_u64(1);
+        let mut rng = rand::thread_rng();
+        let mut input1: [F; 16] = array::from_fn(|_| rng.r#gen());
         let mut input2 = input1;
 
         let part_sum: F = input1[1..].iter().copied().sum();
@@ -494,8 +499,8 @@ mod tests {
     /// for a random input of width 24.
     #[test]
     fn test_generic_internal_linear_layer_24() {
-        let mut rng = Xoroshiro128Plus::seed_from_u64(1);
-        let mut input1: [F; 24] = rng.random();
+        let mut rng = rand::thread_rng();
+        let mut input1: [F; 24] = array::from_fn(|_| rng.r#gen());
         let mut input2 = input1;
 
         let part_sum: F = input1[1..].iter().copied().sum();

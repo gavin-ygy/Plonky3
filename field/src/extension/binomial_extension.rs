@@ -10,7 +10,9 @@ use core::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAss
 use itertools::Itertools;
 use num_bigint::BigUint;
 use p3_util::{flatten_to_base, reconstitute_from_base};
-use rand::distr::StandardUniform;
+//use rand::distributions::Standard;
+use rand::distributions::Standard;
+
 use rand::prelude::Distribution;
 use serde::{Deserialize, Serialize};
 
@@ -34,7 +36,8 @@ pub struct BinomialExtensionField<F, const D: usize, A = F> {
 }
 
 impl<F, A, const D: usize> BinomialExtensionField<F, D, A> {
-    pub(crate) const fn new(value: [A; D]) -> Self {
+    //pub(crate) const fn new(value: [A; D]) -> Self {
+    pub const fn new(value: [A; D]) -> Self { //sp1
         Self {
             value,
             _phantom: PhantomData,
@@ -587,7 +590,7 @@ where
 }
 
 impl<F: BinomiallyExtendable<D>, const D: usize> Distribution<BinomialExtensionField<F, D>>
-    for StandardUniform
+    for Standard 
 where
     Self: Distribution<F>,
 {

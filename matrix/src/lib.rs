@@ -15,6 +15,7 @@ use p3_field::{
 use p3_maybe_rayon::prelude::*;
 use strided::{VerticallyStridedMatrixView, VerticallyStridedRowIndexMap};
 use tracing::instrument;
+use serde::{Serialize, Deserialize};
 
 use crate::dense::RowMajorMatrix;
 
@@ -31,7 +32,7 @@ pub mod util;
 ///
 /// The `Dimensions` type stores the number of columns (`width`) and rows (`height`)
 /// of a matrix. It is commonly used for querying and displaying matrix shapes.
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Dimensions {
     /// Number of columns in the matrix.
     pub width: usize,

@@ -9,7 +9,7 @@ use core::ops::Deref;
 use p3_field::{ExtensionField, Field, PackedValue, scale_slice_in_place};
 use p3_maybe_rayon::prelude::*;
 use rand::Rng;
-use rand::distr::{Distribution, StandardUniform};
+use rand::distributions::{Distribution, Standard};
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
@@ -509,19 +509,19 @@ impl<T: Clone + Default + Send + Sync> DenseMatrix<T> {
 
     pub fn rand<R: Rng>(rng: &mut R, rows: usize, cols: usize) -> Self
     where
-        StandardUniform: Distribution<T>,
+        Standard: Distribution<T>,
     {
-        let values = rng.sample_iter(StandardUniform).take(rows * cols).collect();
+        let values = rng.sample_iter(Standard).take(rows * cols).collect();
         Self::new(values, cols)
     }
 
     pub fn rand_nonzero<R: Rng>(rng: &mut R, rows: usize, cols: usize) -> Self
     where
         T: Field,
-        StandardUniform: Distribution<T>,
+        Standard: Distribution<T>,
     {
         let values = rng
-            .sample_iter(StandardUniform)
+            .sample_iter(Standard)
             .filter(|x| !x.is_zero())
             .take(rows * cols)
             .collect();

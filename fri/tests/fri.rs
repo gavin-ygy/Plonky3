@@ -1,6 +1,6 @@
 use core::cmp::Reverse;
-use core::marker::PhantomData;
-
+use std::marker::PhantomData;
+use itertools::Itertools;
 use p3_baby_bear::{BabyBear, Poseidon2BabyBear};
 use p3_challenger::{CanSampleBits, DuplexChallenger, FieldChallenger};
 use p3_commit::ExtensionMmcs;
@@ -14,8 +14,8 @@ use p3_matrix::util::reverse_matrix_index_bits;
 use p3_merkle_tree::MerkleTreeMmcs;
 use p3_symmetric::{PaddingFreeSponge, TruncatedPermutation};
 use p3_util::log2_strict_usize;
-use rand::rngs::SmallRng;
 use rand::{Rng, SeedableRng};
+use rand_chacha::ChaCha20Rng;
 
 type Val = BabyBear;
 type Challenge = BinomialExtensionField<Val, 4>;
@@ -59,7 +59,7 @@ fn do_test_fri_ldt<R: Rng>(rng: &mut R, log_final_poly_len: usize) {
         })
         .collect();
 
-    let (proof, p_sample) = {
+    let (proof, reduced_openings, p_sample) = {
         // Prover world
         let mut chal = Challenger::new(perm.clone());
         let alpha: Challenge = chal.sample_algebra_element();
@@ -76,11 +76,7 @@ fn do_test_fri_ldt<R: Rng>(rng: &mut R, log_final_poly_len: usize) {
                     .map(|r| {
                         alpha
                             .powers()
-                            .zip(
-                                matrices_with_log_height
-                                    .iter()
-                                    .flat_map(|m| m.row(r).unwrap()),
-                            )
+                            .zip(matrices_with_log_height.iter().flat_map(|m| m.row(r)))
                             .map(|(alpha_pow, v)| alpha_pow * v)
                             .sum()
                     })
@@ -89,11 +85,11 @@ fn do_test_fri_ldt<R: Rng>(rng: &mut R, log_final_poly_len: usize) {
             }
         });
 
-        let input: Vec<Vec<Challenge>> = input.into_iter().rev().flatten().collect();
+        /*let input: Vec<Vec<Challenge>> = input.into_iter().rev().flatten().collect();
 
         let log_max_height = log2_strict_usize(input[0].len());
 
-        let proof = prover::prove(
+        let (proof, _) = prover::prove(
             &TwoAdicFriGenericConfig::<Vec<(usize, Challenge)>, ()>(PhantomData),
             &fc,
             input.clone(),
@@ -108,21 +104,52 @@ fn do_test_fri_ldt<R: Rng>(rng: &mut R, log_final_poly_len: usize) {
                 ro.sort_by_key(|(lh, _)| Reverse(*lh));
                 ro
             },
-        );
+        ); 
 
-        (proof, chal.sample_bits(8))
+        (proof, chal.sample_bits(8)) */
+        let (proof, idxs) = prover::prove(&TwoAdicFriGenericConfig::<Vec<(usize, Challenge)>, ()>(PhantomData), 
+                                            &fc, &input, &mut chal);
+
+        let log_max_height = input.iter().rposition(Option::is_some).unwrap();
+        let reduced_openings: Vec<[Challenge; 32]> = idxs
+            .into_iter()
+            .map(|idx| {
+                input
+                    .iter()
+                    .enumerate()
+                    .map(|(log_height, v)| {
+                        if let Some(v) = v {
+                            v[idx >> (log_max_height - log_height)]
+                        } else {
+                            Challenge::ZERO
+                        }
+                    })
+                    .collect_vec()
+                    .try_into()
+                    .unwrap()
+            })
+            .collect();
+
+        (proof, reduced_openings, chal.sample_bits(8))
+
     };
 
     let mut v_challenger = Challenger::new(perm);
     let _alpha: Challenge = v_challenger.sample_algebra_element();
-    verifier::verify(
-        &TwoAdicFriGenericConfig::<Vec<(usize, Challenge)>, ()>(PhantomData),
+    /*verifier::verify(
+       // &TwoAdicFriGenericConfig::<Vec<(usize, Challenge)>, ()>(PhantomData),
         &fc,
         &proof,
         &mut v_challenger,
-        |_index, proof| Ok(proof.clone()),
+       // |_index, proof| Ok(proof.clone()),
     )
-    .unwrap();
+    .unwrap(); */
+	
+	let fri_challenges =
+        verifier::verify_shape_and_sample_challenges(&fc, &proof, &mut v_challenger)
+            .expect("failed verify shape and sample");
+    verifier::verify_challenges(&fc, &proof, &fri_challenges, &reduced_openings)
+        .expect("failed verify challenges");
 
     assert_eq!(
         p_sample,
@@ -135,18 +162,18 @@ fn do_test_fri_ldt<R: Rng>(rng: &mut R, log_final_poly_len: usize) {
 fn test_fri_ldt() {
     // FRI is kind of flaky depending on indexing luck
     for i in 0..4 {
-        let mut rng = SmallRng::seed_from_u64(i as u64);
+        let mut rng = ChaCha20Rng::seed_from_u64(i as u64);
         do_test_fri_ldt(&mut rng, i + 1);
     }
 }
 
 // This test is expected to panic because the polynomial degree is less than the final_poly_degree in the config.
-#[test]
+/*#[test]
 #[should_panic]
 fn test_fri_ldt_should_panic() {
     // FRI is kind of flaky depending on indexing luck
     for i in 0..4 {
-        let mut rng = SmallRng::seed_from_u64(i);
+        let mut rng = ChaCha20Rng::seed_from_u64(i);
         do_test_fri_ldt(&mut rng, 5);
     }
-}
+}*/

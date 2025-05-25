@@ -1,4 +1,3 @@
-use alloc::collections::BTreeMap;
 use alloc::vec;
 use alloc::vec::Vec;
 use core::fmt::Debug;
@@ -10,7 +9,7 @@ use p3_commit::{BatchOpening, Mmcs, OpenedValues, Pcs};
 use p3_dft::TwoAdicSubgroupDft;
 use p3_field::coset::TwoAdicMultiplicativeCoset;
 use p3_field::{
-    ExtensionField, PackedFieldExtension, TwoAdicField, batch_multiplicative_inverse,
+    ExtensionField, Field, PackedValue, PackedFieldExtension, TwoAdicField, PrimeCharacteristicRing, batch_multiplicative_inverse,
     cyclic_subgroup_coset_known_order, dot_product,
 };
 use p3_interpolation::interpolate_coset_with_precomputation;
@@ -19,8 +18,8 @@ use p3_matrix::dense::{RowMajorMatrix, RowMajorMatrixView};
 use p3_matrix::{Dimensions, Matrix};
 use p3_maybe_rayon::prelude::*;
 use p3_util::linear_map::LinearMap;
-use p3_util::zip_eq::zip_eq;
 use p3_util::{log2_strict_usize, reverse_bits_len, reverse_slice_index_bits};
+use serde::{Deserialize, Serialize};
 use tracing::{info_span, instrument};
 
 use crate::verifier::{self, FriError};
@@ -28,9 +27,10 @@ use crate::{FriConfig, FriGenericConfig, FriProof, prover};
 
 #[derive(Debug)]
 pub struct TwoAdicFriPcs<Val, Dft, InputMmcs, FriMmcs> {
-    pub(crate) dft: Dft,
-    pub(crate) mmcs: InputMmcs,
-    pub(crate) fri: FriConfig<FriMmcs>,
+    // degree bound
+    pub(crate) dft: Dft,      //sp1 :Radix2DitParallel
+    pub(crate) mmcs: InputMmcs, //sp1:FieldMerkleTreeMmcs
+    pub(crate) fri: FriConfig<FriMmcs>, //sp1: ExtensionMmcs<Val, Challenge, ValMmcs>;
     _phantom: PhantomData<Val>,
 }
 
@@ -43,7 +43,31 @@ impl<Val, Dft, InputMmcs, FriMmcs> TwoAdicFriPcs<Val, Dft, InputMmcs, FriMmcs> {
             _phantom: PhantomData,
         }
     }
+
+    pub fn fri_config(&self) -> &FriConfig<FriMmcs> {
+        &self.fri
+    }
 }
+
+#[derive(Debug)]
+pub enum VerificationError<InputMmcsError, FriMmcsError> {
+    InputMmcsError(InputMmcsError),
+    FriError(FriError<FriMmcsError, ()>),
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(bound = "")]
+pub struct TwoAdicFriPcsProof<
+    Val: Field,
+    Challenge: Field,
+    InputMmcs: Mmcs<Val>,
+    FriMmcs: Mmcs<Challenge>,
+> {
+    pub fri_proof: FriProof<Challenge, FriMmcs, Val>,
+    /// For each query, for each committed batch, query openings for that batch
+    pub query_openings: Vec<Vec<BatchOpening<Val, InputMmcs>>>,
+}
+
 
 pub struct TwoAdicFriGenericConfig<InputProof, InputError>(
     pub PhantomData<(InputProof, InputError)>,
@@ -135,13 +159,15 @@ where
     Challenge: TwoAdicField + ExtensionField<Val>,
     Challenger:
         FieldChallenger<Val> + CanObserve<FriMmcs::Commitment> + GrindingChallenger<Witness = Val>,
+    <InputMmcs as Mmcs<Val>>::ProverData<RowMajorMatrix<Val>>: Clone,
 {
     type Domain = TwoAdicMultiplicativeCoset<Val>;
     type Commitment = InputMmcs::Commitment;
     type ProverData = InputMmcs::ProverData<RowMajorMatrix<Val>>;
     type EvaluationsOnDomain<'a> = BitReversedMatrixView<RowMajorMatrixView<'a, Val>>;
-    type Proof = FriProof<Challenge, FriMmcs, Val, Vec<BatchOpening<Val, InputMmcs>>>;
-    type Error = FriError<FriMmcs::Error, InputMmcs::Error>;
+ 
+    type Proof = TwoAdicFriPcsProof<Val, Challenge, InputMmcs, FriMmcs>;
+    type Error = VerificationError<InputMmcs::Error, FriMmcs::Error>;
     const ZK: bool = false;
 
     fn natural_domain_for_degree(&self, degree: usize) -> Self::Domain {
@@ -400,27 +426,43 @@ where
                         });
                     num_reduced[log_height] += mat.width();
                 }
+                
             }
         }
 
-        let fri_input = reduced_openings.into_iter().rev().flatten().collect_vec();
+        //let fri_input = reduced_openings.into_iter().rev().flatten().collect_vec();
 
         let g: TwoAdicFriGenericConfigForMmcs<Val, InputMmcs> =
             TwoAdicFriGenericConfig(PhantomData);
 
-        let fri_proof = prover::prove(&g, &self.fri, fri_input, challenger, |index| {
-            rounds
-                .iter()
-                .map(|(data, _)| {
-                    let log_max_height = log2_strict_usize(self.mmcs.get_max_height(data));
-                    let bits_reduced = log_global_max_height - log_max_height;
-                    let reduced_index = index >> bits_reduced;
-                    self.mmcs.open_batch(reduced_index, data)
-                })
-                .collect()
-        });
+        let (fri_proof, query_indices) = prover::prove(&g, &self.fri, &reduced_openings, challenger);
+        let query_openings = query_indices
+            .into_iter()
+            .map(|index| {
+                rounds
+                    .iter()
+                    .map(|(data, _)| {
+                        let log_max_height = log2_strict_usize(self.mmcs.get_max_height(data));
+                        let bits_reduced = log_global_max_height - log_max_height;
+                        let reduced_index = index >> bits_reduced;
+                        let (opened_values, opening_proof) =
+                            self.mmcs.open_batch(reduced_index, data).unpack();
+                        BatchOpening {
+                            opened_values,
+                            opening_proof,
+                        }
+                    })
+                    .collect()
+            })
+            .collect();
 
-        (all_opened_values, fri_proof)
+        (
+            all_opened_values,
+            TwoAdicFriPcsProof {
+                fri_proof,
+                query_openings,
+            },
+        )
     }
 
     fn verify(
@@ -444,46 +486,46 @@ where
         proof: &Self::Proof,
         challenger: &mut Challenger,
     ) -> Result<(), Self::Error> {
-        // Write evaluations to challenger
-        for (_, round) in &rounds {
-            for (_, mat) in round {
-                for (_, point) in mat {
+        // Write evaluations to challenger.
+        for (_, round) in rounds.iter() {
+            for (_, mat) in round.iter() {
+                for (_, point) in mat.iter() {
                     point
                         .iter()
                         .for_each(|&opening| challenger.observe_algebra_element(opening));
                 }
             }
         }
-
         // Batch combination challenge
         let alpha: Challenge = challenger.sample_algebra_element();
 
+        let fri_challenges =
+            verifier::verify_shape_and_sample_challenges(&self.fri, &proof.fri_proof, challenger)
+                .map_err(VerificationError::FriError)?;
+
         let log_global_max_height =
-            proof.commit_phase_commits.len() + self.fri.log_blowup + self.fri.log_final_poly_len;
+            proof.fri_proof.commit_phase_commits.len() + self.fri.log_blowup;
 
-        let g: TwoAdicFriGenericConfigForMmcs<Val, InputMmcs> =
-            TwoAdicFriGenericConfig(PhantomData);
+        let reduced_openings: Vec<[Challenge; 32]> = proof
+            .query_openings
+            .iter()
+            .zip(&fri_challenges.query_indices)
+            .map(|(query_opening, &index)| {
+                let mut ro = [Challenge::ZERO; 32];
+                let mut alpha_pow = [Challenge::ONE; 32];
 
-        verifier::verify(&g, &self.fri, proof, challenger, |index, input_proof| {
-            // TODO: separate this out into functions
+                for (batch_opening, (batch_commit, mats)) in izip!(query_opening, &rounds) {
+                    let batch_heights = mats
+                        .iter()
+                        .map(|(domain, _)| domain.size() << self.fri.log_blowup)
+                        .collect_vec();
+                    let batch_dims = batch_heights
+                        .iter()
+                        // TODO: MMCS doesn't really need width; we put 0 for now.
+                        .map(|&height| Dimensions { width: 0, height })
+                        .collect_vec();
 
-            // log_height -> (alpha_pow, reduced_opening)
-            let mut reduced_openings = BTreeMap::<usize, (Challenge, Challenge)>::new();
-
-            for (batch_opening, (batch_commit, mats)) in
-                zip_eq(input_proof, &rounds, FriError::InvalidProofShape)?
-            {
-                let batch_heights = mats
-                    .iter()
-                    .map(|(domain, _)| domain.size() << self.fri.log_blowup)
-                    .collect_vec();
-                let batch_dims = batch_heights
-                    .iter()
-                    // TODO: MMCS doesn't really need width; we put 0 for now.
-                    .map(|&height| Dimensions { width: 0, height })
-                    .collect_vec();
-
-                if let Some(batch_max_height) = batch_heights.iter().max() {
+                    let batch_max_height = batch_heights.iter().max().expect("Empty batch?");
                     let log_batch_max_height = log2_strict_usize(*batch_max_height);
                     let bits_reduced = log_global_max_height - log_batch_max_height;
                     let reduced_index = index >> bits_reduced;
@@ -493,59 +535,39 @@ where
                         &batch_dims,
                         reduced_index,
                         batch_opening.into(),
-                    )
-                } else {
-                    // Empty batch?
-                    self.mmcs
-                        .verify_batch(batch_commit, &[], 0, batch_opening.into())
-                }
-                .map_err(FriError::InputError)?;
+                    )?;
+                    for (mat_opening, (mat_domain, mat_points_and_values)) in
+                        izip!(&batch_opening.opened_values, mats)
+                    {
+                        let log_height = log2_strict_usize(mat_domain.size()) + self.fri.log_blowup;
 
-                for (mat_opening, (mat_domain, mat_points_and_values)) in zip_eq(
-                    &batch_opening.opened_values,
-                    mats,
-                    FriError::InvalidProofShape,
-                )? {
-                    let log_height = log2_strict_usize(mat_domain.size()) + self.fri.log_blowup;
+                        let bits_reduced = log_global_max_height - log_height;
+                        let rev_reduced_index = reverse_bits_len(index >> bits_reduced, log_height);
 
-                    let bits_reduced = log_global_max_height - log_height;
-                    let rev_reduced_index = reverse_bits_len(index >> bits_reduced, log_height);
+                        let x = Val::GENERATOR
+                            * Val::two_adic_generator(log_height).exp_u64(rev_reduced_index as u64);
 
-                    // todo: this can be nicer with domain methods?
-
-                    let x = Val::GENERATOR
-                        * Val::two_adic_generator(log_height).exp_u64(rev_reduced_index as u64);
-
-                    let (alpha_pow, ro) = reduced_openings
-                        .entry(log_height)
-                        .or_insert((Challenge::ONE, Challenge::ZERO));
-
-                    for (z, ps_at_z) in mat_points_and_values {
-                        for (&p_at_x, &p_at_z) in
-                            zip_eq(mat_opening, ps_at_z, FriError::InvalidProofShape)?
-                        {
-                            let quotient = (-p_at_z + p_at_x) / (-*z + x);
-                            *ro += *alpha_pow * quotient;
-                            *alpha_pow *= alpha;
+                        for (z, ps_at_z) in mat_points_and_values {
+                            for (&p_at_x, &p_at_z) in izip!(mat_opening, ps_at_z) {
+                                let quotient = (-p_at_z + p_at_x) / (-*z + x);
+                                ro[log_height] += alpha_pow[log_height] * quotient;
+                                alpha_pow[log_height] *= alpha;
+                            }
                         }
                     }
                 }
-            }
+                Ok(ro)
+            })
+            .collect::<Result<Vec<_>, InputMmcs::Error>>()
+            .map_err(VerificationError::InputMmcsError)?;
 
-            // `reduced_openings` would have a log_height = log_blowup entry only if there was a
-            // trace matrix of height 1. In this case the reduced opening can be skipped as it will
-            // not be checked against any commit phase commit.
-            if let Some((_alpha_pow, ro)) = reduced_openings.remove(&self.fri.log_blowup) {
-                assert!(ro.is_zero());
-            }
-
-            // Return reduced openings descending by log_height.
-            Ok(reduced_openings
-                .into_iter()
-                .rev()
-                .map(|(log_height, (_alpha_pow, ro))| (log_height, ro))
-                .collect())
-        })?;
+        verifier::verify_challenges(
+            &self.fri,
+            &proof.fri_proof,
+            &fri_challenges,
+            &reduced_openings,
+        )
+        .map_err(VerificationError::FriError)?;
 
         Ok(())
     }
@@ -585,3 +607,146 @@ fn compute_inverse_denominators<F: TwoAdicField, EF: ExtensionField<F>, M: Matri
         })
         .collect()
 }
+
+//sp1 
+pub struct PowersReducer<F: Field, EF> {
+    pub powers: Vec<EF>,
+    // If EF::D = 2 and powers is [01 23 45 67],
+    // this holds [[02 46] [13 57]]
+    pub transposed_packed: Vec<Vec<F::Packing>>,
+}
+
+impl<F: Field, EF: ExtensionField<F>> PowersReducer<F, EF> {
+    pub fn new(base: EF, max_width: usize) -> Self {
+        let powers: Vec<EF> = base
+            .powers()
+            .take(max_width.next_multiple_of(F::Packing::WIDTH))
+            .collect();
+
+        let transposed_packed: Vec<Vec<F::Packing>> = transpose_vec(
+            (0..EF::DIMENSION)
+                .map(|d| {
+                    F::Packing::pack_slice(
+                        //&powers.iter().map(|a| a.as_base_slice()[d]).collect_vec(),
+                        &powers.iter().map(|a| a.as_basis_coefficients_slice()[d]).collect_vec(),
+                    )
+                    .to_vec()
+                })
+                .collect(),
+        );
+
+        Self {
+            powers,
+            transposed_packed,
+        }
+    }
+
+    // Compute sum_i base^i * x_i
+    pub fn reduce_ext(&self, xs: &[EF]) -> EF {
+        self.powers.iter().zip(xs).map(|(&pow, &x)| pow * x).sum()
+    }
+
+    // Same as `self.powers.iter().zip(xs).map(|(&pow, &x)| pow * x).sum()`
+    pub fn reduce_base(&self, xs: &[F]) -> EF {
+        let (xs_packed, xs_sfx) = F::Packing::pack_slice_with_suffix(xs);
+        let mut sums = (0..EF::DIMENSION).map(|_| F::Packing::ZERO).collect::<Vec<_>>();
+        for (&x, pows) in izip!(xs_packed, &self.transposed_packed) {
+            for d in 0..EF::DIMENSION {
+                sums[d] += x * pows[d];
+            }
+        }
+        let packed_sum = EF::from_basis_coefficients_fn(|d| sums[d].as_slice().iter().copied().sum());//old ver: from_base_fn
+        let sfx_sum = xs_sfx
+            .iter()
+            .zip(&self.powers[(xs_packed.len() * F::Packing::WIDTH)..])
+            .map(|(&x, &pow)| pow * x)
+            .sum::<EF>();
+        packed_sum + sfx_sum
+    }
+}
+
+fn transpose_vec<T>(v: Vec<Vec<T>>) -> Vec<Vec<T>> {
+    assert!(!v.is_empty());
+    let len = v[0].len();
+    let mut iters: Vec<_> = v.into_iter().map(|n| n.into_iter()).collect();
+    (0..len)
+        .map(|_| {
+            iters
+                .iter_mut()
+                .map(|n| n.next().unwrap())
+                .collect::<Vec<T>>()
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+
+    use p3_baby_bear::BabyBear;
+    use p3_field::extension::BinomialExtensionField;
+    //use p3_field::FieldExtensionAlgebra;
+    use p3_field::BasedVectorSpace;
+    use rand::{thread_rng, Rng};
+
+    use super::*;
+
+    type F = BabyBear;
+    type EF = BinomialExtensionField<F, 4>;
+
+    #[test]
+    fn test_powers_reducer() {
+        let mut rng = rand::thread_rng();
+        //let alpha: EF = rng.gen();
+        let alpha: EF = rng.r#gen::<EF>();
+        let n = 1000;
+        let sizes = [5, 110, 512, 999, 1000];
+        let r = PowersReducer::<F, EF>::new(alpha, n);
+
+        // check reduce_ext
+        for size in sizes {
+            let xs: Vec<EF> = (0..size).map(|_| rng.r#gen::<EF>()).collect();
+            assert_eq!(
+                r.reduce_ext(&xs),
+                xs.iter()
+                    .enumerate()
+                    .map(|(i, &x)| alpha.exp_u64(i as u64) * x)
+                    .sum()
+            );
+        }
+
+        // check reduce_base
+        for size in sizes {
+            let xs: Vec<F> = (0..size).map(|_| rng.r#gen::<F>()).collect();
+            assert_eq!(
+                r.reduce_base(&xs),
+                xs.iter()
+                    .enumerate()
+                    //.map(|(i, &x)| alpha.exp_u64(i as u64) * EF::from_base(x)) 
+                    .map(|(i, &x)| alpha.exp_u64(i as u64) * x)
+                    .sum()
+            );
+        }
+
+        // bench reduce_base
+        /*
+        use core::hint::black_box;
+        use std::time::Instant;
+        let samples = 1_000;
+        for i in 0..5 {
+            let xs: Vec<F> = (0..999).map(|_| rng.gen()).collect();
+            let t0 = Instant::now();
+            for _ in 0..samples {
+                black_box(r.reduce_base_slow(black_box(&xs)));
+            }
+            let dt_slow = t0.elapsed();
+            let t0 = Instant::now();
+            for _ in 0..samples {
+                black_box(r.reduce_base(black_box(&xs)));
+            }
+            let dt_fast = t0.elapsed();
+            println!("sample {i}: slow: {dt_slow:?} fast: {dt_fast:?}");
+        }
+        */
+    }
+}
+

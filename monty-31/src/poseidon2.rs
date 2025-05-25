@@ -74,7 +74,7 @@ pub trait InternalLayerParameters<FP: FieldParameters, const WIDTH: usize>:
     InternalLayerBaseParameters<FP, WIDTH>
 {
 }
-
+    
 impl<FP, const WIDTH: usize, P2P, const D: u64> InternalLayer<MontyField31<FP>, WIDTH, D>
     for Poseidon2InternalLayerMonty31<FP, WIDTH, P2P>
 where
@@ -84,12 +84,15 @@ where
     /// Perform the internal layers of the Poseidon2 permutation on the given state.
     fn permute_state(&self, state: &mut [MontyField31<FP>; WIDTH]) {
         self.internal_constants.iter().for_each(|rc| {
+            //println!("###beging: internal_layer_mat_mul, state:{:?}", state);
             state[0] += *rc;
             state[0] = state[0].injective_exp_n();
             let part_sum: MontyField31<FP> = state[1..].iter().copied().sum();
             let full_sum = part_sum + state[0];
             state[0] = part_sum - state[0];
+            //println!("### internal_layer_mat_mul, full_sum:{:?}", full_sum);
             P2P::internal_layer_mat_mul(state, full_sum);
+            //println!("###after: internal_layer_mat_mul, state:{:?}", state);
         })
     }
 }

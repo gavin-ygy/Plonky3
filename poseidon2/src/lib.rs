@@ -21,13 +21,20 @@ pub use internal::*;
 use p3_field::{Algebra, InjectiveMonomial, PrimeField, PrimeField64};
 use p3_symmetric::{CryptographicPermutation, Permutation};
 use rand::Rng;
-use rand::distr::{Distribution, StandardUniform};
+use rand::distributions::{Distribution, Standard};
+use serde::{Deserialize, Serialize};
 pub use round_numbers::poseidon2_round_numbers_128;
 
 const SUPPORTED_WIDTHS: [usize; 8] = [2, 3, 4, 8, 12, 16, 20, 24];
 
 /// The Poseidon2 permutation.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(bound(
+    serialize = "F: Serialize, [F; WIDTH]: Serialize, ExternalPerm: Serialize, InternalPerm: Serialize"
+))]
+#[serde(bound(
+    deserialize = "F: Deserialize<'de>, [F; WIDTH]: Deserialize<'de>, ExternalPerm: Deserialize<'de>, InternalPerm: Deserialize<'de>"
+))]
 pub struct Poseidon2<F, ExternalPerm, InternalPerm, const WIDTH: usize, const D: u64> {
     /// The permutations used in External Rounds.
     external_layer: ExternalPerm,
@@ -65,10 +72,10 @@ where
     /// Create a new Poseidon2 configuration with random parameters.
     pub fn new_from_rng<R: Rng>(rounds_f: usize, rounds_p: usize, rng: &mut R) -> Self
     where
-        StandardUniform: Distribution<F> + Distribution<[F; WIDTH]>,
+        Standard: Distribution<F> + Distribution<[F; WIDTH]>,
     {
         let external_constants = ExternalLayerConstants::new_from_rng(rounds_f, rng);
-        let internal_constants = rng.sample_iter(StandardUniform).take(rounds_p).collect();
+        let internal_constants = rng.sample_iter(Standard).take(rounds_p).collect();
 
         Self::new(external_constants, internal_constants)
     }
@@ -88,7 +95,7 @@ where
     /// This will panic if the optimal parameters for the given field and width have not been computed.
     pub fn new_from_rng_128<R: Rng>(rng: &mut R) -> Self
     where
-        StandardUniform: Distribution<F> + Distribution<[F; WIDTH]>,
+        Standard: Distribution<F> + Distribution<[F; WIDTH]>,
     {
         let round_numbers = poseidon2_round_numbers_128::<F>(WIDTH, D);
         let (rounds_f, rounds_p) =

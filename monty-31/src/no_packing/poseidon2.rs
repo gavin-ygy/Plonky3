@@ -6,11 +6,15 @@ use alloc::vec::Vec;
 use core::marker::PhantomData;
 
 use p3_poseidon2::{ExternalLayerConstants, ExternalLayerConstructor, InternalLayerConstructor};
-
+use serde::{Deserialize, Serialize};
 use crate::{FieldParameters, InternalLayerBaseParameters, MontyField31, MontyParameters};
 
 /// The internal layers of the Poseidon2 permutation for Monty31 fields.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(bound(
+    serialize = "MontyField31<MP>: Serialize, MP: Serialize, ILP: Serialize",
+    deserialize = "MontyField31<MP>: Deserialize<'de>, MP: Deserialize<'de>, ILP: Deserialize<'de>"
+))]
 pub struct Poseidon2InternalLayerMonty31<
     MP: MontyParameters,
     const WIDTH: usize,
@@ -21,7 +25,11 @@ pub struct Poseidon2InternalLayerMonty31<
 }
 
 /// The external layers of the Poseidon2 permutation for Monty31 fields.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(bound(
+    serialize = "MontyField31<MP>: Serialize, ExternalLayerConstants<MontyField31<MP>, WIDTH>: Serialize, MP: Serialize",
+    deserialize = "MontyField31<MP>: Deserialize<'de>, ExternalLayerConstants<MontyField31<MP>, WIDTH>: Deserialize<'de>, MP: Deserialize<'de>"
+))]
 pub struct Poseidon2ExternalLayerMonty31<MP: MontyParameters, const WIDTH: usize> {
     pub(crate) external_constants: ExternalLayerConstants<MontyField31<MP>, WIDTH>,
 }

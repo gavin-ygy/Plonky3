@@ -1,15 +1,14 @@
 use alloc::vec;
 use alloc::vec::Vec;
 
-use itertools::Itertools;
+use itertools::izip;  //{Itertools, izip};
 use p3_challenger::{CanObserve, FieldChallenger, GrindingChallenger};
 use p3_commit::{BatchOpeningRef, Mmcs};
 use p3_field::{ExtensionField, Field, TwoAdicField};
 use p3_matrix::Dimensions;
 use p3_util::reverse_bits_len;
-use p3_util::zip_eq::zip_eq;
 
-use crate::{CommitPhaseProofStep, FriConfig, FriGenericConfig, FriProof};
+use crate::{FriConfig, FriProof, QueryProof};
 
 #[derive(Debug)]
 pub enum FriError<CommitMmcsErr, InputError> {
@@ -20,24 +19,24 @@ pub enum FriError<CommitMmcsErr, InputError> {
     InvalidPowWitness,
 }
 
-pub fn verify<G, Val, Challenge, M, Challenger>(
-    g: &G,
+#[derive(Debug)]
+pub struct FriChallenges<F> {
+    pub query_indices: Vec<usize>,
+    pub betas: Vec<F>,
+}
+
+pub fn verify_shape_and_sample_challenges<F, EF, M, Challenger>(
     config: &FriConfig<M>,
-    proof: &FriProof<Challenge, M, Challenger::Witness, G::InputProof>,
+    proof: &FriProof<EF, M, Challenger::Witness>,
     challenger: &mut Challenger,
-    open_input: impl Fn(
-        usize,
-        &G::InputProof,
-    ) -> Result<Vec<(usize, Challenge)>, FriError<M::Error, G::InputError>>,
-) -> Result<(), FriError<M::Error, G::InputError>>
+) -> Result<FriChallenges<EF>, FriError<M::Error, ()>>
 where
-    Val: Field,
-    Challenge: ExtensionField<Val> + TwoAdicField,
-    M: Mmcs<Challenge>,
-    Challenger: FieldChallenger<Val> + GrindingChallenger + CanObserve<M::Commitment>,
-    G: FriGenericConfig<Val, Challenge>,
+    F: Field,
+    EF: ExtensionField<F>,
+    M: Mmcs<EF>,
+    Challenger: GrindingChallenger + CanObserve<M::Commitment> + FieldChallenger<F>,
 {
-    let betas: Vec<Challenge> = proof
+    let betas: Vec<EF> = proof
         .commit_phase_commits
         .iter()
         .map(|comm| {
@@ -47,10 +46,12 @@ where
         .collect();
 
     // Observe all coefficients of the final polynomial.
-    proof
-        .final_poly
-        .iter()
-        .for_each(|x| challenger.observe_algebra_element(*x));
+    //proof
+     //   .final_poly
+     //   .iter()
+     //   .for_each(|x| challenger.observe_algebra_element(*x));
+    
+    challenger.observe_algebra_element(proof.final_poly);
 
     if proof.query_proofs.len() != config.num_queries {
         return Err(FriError::InvalidProofShape);
@@ -61,62 +62,46 @@ where
         return Err(FriError::InvalidPowWitness);
     }
 
-    // The log of the maximum domain size.
-    let log_max_height =
-        proof.commit_phase_commits.len() + config.log_blowup + config.log_final_poly_len;
+    let log_max_height = proof.commit_phase_commits.len() + config.log_blowup;
 
-    // The log of the final domain size.
-    let log_final_height = config.log_blowup + config.log_final_poly_len;
+    let query_indices: Vec<usize> = (0..config.num_queries)
+        .map(|_| challenger.sample_bits(log_max_height))
+        .collect();
 
-    for qp in &proof.query_proofs {
-        let index = challenger.sample_bits(log_max_height + g.extra_query_index_bits());
-        let ro = open_input(index, &qp.input_proof)?;
+    Ok(FriChallenges {
+        query_indices,
+        betas,
+    })
+}
 
-        debug_assert!(
-            ro.iter().tuple_windows().all(|((l, _), (r, _))| l > r),
-            "reduced openings sorted by height descending"
-        );
 
-        let mut domain_index = index >> g.extra_query_index_bits();
-
-        // Starting at the evaluation at `index` of the initial domain,
-        // perform fri folds until the domain size reaches the final domain size.
-        // Check after each fold that the pair of sibling evaluations at the current
-        // node match the commitment.
+pub fn verify_challenges<F, M, Witness>(
+    config: &FriConfig<M>,
+    proof: &FriProof<F, M, Witness>,
+    challenges: &FriChallenges<F>,
+    reduced_openings: &[[F; 32]],
+) -> Result<(), FriError<M::Error, ()>>
+where
+    F: TwoAdicField,
+    M: Mmcs<F>,
+{
+    let log_max_height = proof.commit_phase_commits.len() + config.log_blowup;
+    for (&index, query_proof, ro) in izip!(
+        &challenges.query_indices,
+        &proof.query_proofs,
+        reduced_openings
+    ) {
         let folded_eval = verify_query(
-            g,
             config,
-            &mut domain_index,
-            zip_eq(
-                zip_eq(
-                    &betas,
-                    &proof.commit_phase_commits,
-                    FriError::InvalidProofShape,
-                )?,
-                &qp.commit_phase_openings,
-                FriError::InvalidProofShape,
-            )?,
+            &proof.commit_phase_commits,
+            index,
+            query_proof,
+            &challenges.betas,
             ro,
             log_max_height,
-            log_final_height,
         )?;
 
-        let mut eval = Challenge::ZERO;
-
-        // We open the final polynomial at index `domain_index`, which corresponds to evaluating
-        // the polynomial at x^k, where x is the 2-adic generator of order `max_height` and k is
-        // `reverse_bits_len(domain_index, log_max_height)`.
-        let x = Challenge::two_adic_generator(log_max_height)
-            .exp_u64(reverse_bits_len(domain_index, log_max_height) as u64);
-        let mut x_pow = Challenge::ONE;
-
-        // Evaluate the final polynomial at x.
-        for coeff in &proof.final_poly {
-            eval += *coeff * x_pow;
-            x_pow *= x;
-        }
-
-        if eval != folded_eval {
+        if folded_eval != proof.final_poly {
             return Err(FriError::FinalPolyMismatch);
         }
     }
@@ -124,86 +109,64 @@ where
     Ok(())
 }
 
-type CommitStep<'a, F, M> = (
-    (
-        &'a F, // The challenge point beta used for the next fold of FRI evaluations.
-        &'a <M as Mmcs<F>>::Commitment, // A commitment to the FRI evaluations on the current domain.
-    ),
-    &'a CommitPhaseProofStep<F, M>, // The sibling and opening proof for the current FRI node.
-);
 
-/// Verifies a single query chain in the FRI proof.
-///
-/// Given an initial `index` corresponding to a point in the initial domain
-/// and a series of `reduced_openings` corresponding to evaluations of
-/// polynomials to be added in at specific domain sizes, perform the standard
-/// sequence of FRI folds, checking at each step that the pair of sibling evaluations
-/// match the commitment.
-fn verify_query<'a, G, F, EF, M>(
-    g: &G,
+fn verify_query<F, M>(
     config: &FriConfig<M>,
-    index: &mut usize,
-    steps: impl ExactSizeIterator<Item = CommitStep<'a, EF, M>>,
-    reduced_openings: Vec<(usize, EF)>,
+    commit_phase_commits: &[M::Commitment],
+    mut index: usize,
+    proof: &QueryProof<F, M>,
+    betas: &[F],
+    reduced_openings: &[F; 32],
     log_max_height: usize,
-    log_final_height: usize,
-) -> Result<EF, FriError<M::Error, G::InputError>>
+) -> Result<F, FriError<M::Error, ()>>
 where
-    F: Field,
-    EF: ExtensionField<F>,
-    M: Mmcs<EF> + 'a,
-    G: FriGenericConfig<F, EF>,
+    F: TwoAdicField,
+    M: Mmcs<F>,
 {
-    let mut folded_eval = EF::ZERO;
-    let mut ro_iter = reduced_openings.into_iter().peekable();
+    let mut folded_eval = F::ZERO;
+    let mut x = F::two_adic_generator(log_max_height)
+        .exp_u64(reverse_bits_len(index, log_max_height) as u64);
 
-    // We start with evaluations over a domain of size (1 << log_max_height). We fold
-    // using FRI until the domain size reaches (1 << log_final_height).
-    for (log_folded_height, ((&beta, comm), opening)) in zip_eq(
-        (log_final_height..log_max_height).rev(),
-        steps,
-        FriError::InvalidProofShape,
-    )? {
-        // If there are new polynomials to roll in at this height, do so.
-        if let Some((_, ro)) = ro_iter.next_if(|(lh, _)| *lh == log_folded_height + 1) {
-            folded_eval += ro;
-        }
+    for (log_folded_height, commit, step, &beta) in izip!(
+        (0..log_max_height).rev(),
+        commit_phase_commits,
+        &proof.commit_phase_openings,
+        betas,
+    ) {
+        folded_eval += reduced_openings[log_folded_height + 1];
 
-        // Get the index of the other sibling of the current fri node.
-        let index_sibling = *index ^ 1;
+        let index_sibling = index ^ 1;
+        let index_pair = index >> 1;
 
         let mut evals = vec![folded_eval; 2];
-        evals[index_sibling % 2] = opening.sibling_value;
+        evals[index_sibling % 2] = step.sibling_value;
 
         let dims = &[Dimensions {
             width: 2,
             height: 1 << log_folded_height,
         }];
 
-        // Replace index with the index of the parent fri node.
-        *index >>= 1;
-
-        // Verify the commitment to the evaluations of the sibling nodes.
         config
             .mmcs
             .verify_batch(
-                comm,
+                commit,
                 dims,
-                *index,
-                BatchOpeningRef::new(&[evals.clone()], &opening.opening_proof), // It's possible to remove the clone here but unnecessary as evals is tiny.
+                index_pair,
+                BatchOpeningRef::new(&[evals.clone()], &step.opening_proof), // It's possible to remove the clone here but unnecessary as evals is tiny.
             )
             .map_err(FriError::CommitPhaseMmcsError)?;
 
-        // Fold the pair of evaluations of sibling nodes into the evaluation of the parent fri node.
-        folded_eval = g.fold_row(*index, log_folded_height, beta, evals.into_iter());
+        let mut xs = [x; 2];
+        xs[index_sibling % 2] *= F::two_adic_generator(1);
+        // interpolate and evaluate at beta
+        folded_eval = evals[0] + (beta - xs[0]) * (evals[1] - evals[0]) / (xs[1] - xs[0]);
+
+        index = index_pair;
+        x = x.square();
     }
 
-    // If ro_iter is not empty, we failed to fold in some polynomial evaluations.
-    if ro_iter.next().is_some() {
-        return Err(FriError::InvalidProofShape);
-    }
+    debug_assert!(index < config.blowup(), "index was {}", index);
+    debug_assert_eq!(x.exp_power_of_2(config.log_blowup), F::ONE);
 
-    // If we reached this point, we have verified that, starting at the initial index,
-    // the chain of folds has produced folded_eval.
     Ok(folded_eval)
 }

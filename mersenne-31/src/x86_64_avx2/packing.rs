@@ -11,7 +11,7 @@ use p3_field::{
 };
 use p3_util::reconstitute_from_base;
 use rand::Rng;
-use rand::distr::{Distribution, StandardUniform};
+use rand::distributions::{Distribution, Standard};
 
 use crate::Mersenne31;
 
@@ -558,10 +558,10 @@ impl Sub<PackedMersenne31AVX2> for Mersenne31 {
     }
 }
 
-impl Distribution<PackedMersenne31AVX2> for StandardUniform {
+impl Distribution<PackedMersenne31AVX2> for Standard {
     #[inline]
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> PackedMersenne31AVX2 {
-        PackedMersenne31AVX2(rng.random())
+        PackedMersenne31AVX2(rng.r#gen())
     }
 }
 

@@ -1,5 +1,5 @@
 use core::iter::Take;
-
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use crate::{Powers, TwoAdicField};
 
 /// Coset of a subgroup of the group of units of a finite field of order equal
@@ -53,7 +53,9 @@ use crate::{Powers, TwoAdicField};
 ///     coset.shift().exp_power_of_2(2),
 /// );
 /// ```
-#[derive(Clone, Copy, Debug)]
+#[derive(Copy, Clone, Debug, Serialize, Deserialize)]
+#[serde(bound(serialize = "F: Serialize"))]
+#[serde(bound(deserialize = "F: DeserializeOwned"))]
 pub struct TwoAdicMultiplicativeCoset<F: TwoAdicField> {
     // Letting s = shift, and g = generator (of order 2^log_size), the coset in
     // question is

@@ -10,8 +10,10 @@ use p3_fri::{TwoAdicFriPcs, create_benchmark_fri_config};
 use p3_keccak::{Keccak256Hash, KeccakF};
 use p3_mersenne_31::Mersenne31;
 use p3_symmetric::{CryptographicPermutation, PaddingFreeSponge, SerializingHasher};
-use p3_uni_stark::{Proof, StarkGenericConfig, prove, verify};
-use rand::distr::StandardUniform;
+use p3_uni_stark::{Proof, StarkConfig, StarkGenericConfig, prove, verify};
+use p3_util::log2_ceil_usize;
+use p3_matrix::Matrix;
+use rand::distributions::Standard;
 use rand::prelude::Distribution;
 
 use crate::airs::ExampleHashAir;
@@ -70,7 +72,7 @@ pub fn prove_monty31_keccak<
     num_hashes: usize,
 ) -> Result<(), impl Debug>
 where
-    StandardUniform: Distribution<F>,
+    Standard: Distribution<F>,
 {
     let val_mmcs = get_keccak_mmcs();
 
@@ -79,7 +81,7 @@ where
 
     let trace = proof_goal.generate_trace_rows(num_hashes, fri_config.log_blowup);
 
-    let pcs = TwoAdicFriPcs::new(dft, val_mmcs, fri_config);
+    let pcs = TwoAdicFriPcs::new(log2_ceil_usize(trace.height()), dft, val_mmcs, fri_config);
     let challenger = SerializingChallenger32::from_hasher(vec![], Keccak256Hash {});
 
     let config = KeccakStarkConfig::new(pcs, challenger);
@@ -112,7 +114,7 @@ pub fn prove_monty31_poseidon2<
     perm24: Perm24,
 ) -> Result<(), impl Debug>
 where
-    StandardUniform: Distribution<F>,
+    Standard: Distribution<F>,
 {
     let val_mmcs = get_poseidon2_mmcs::<F, _, _>(perm16, perm24.clone());
 
@@ -121,7 +123,7 @@ where
 
     let trace = proof_goal.generate_trace_rows(num_hashes, fri_config.log_blowup);
 
-    let pcs = TwoAdicFriPcs::new(dft, val_mmcs, fri_config);
+    let pcs = TwoAdicFriPcs::new(log2_ceil_usize(trace.height()), dft, val_mmcs, fri_config);
     let challenger = DuplexChallenger::new(perm24);
 
     let config = Poseidon2StarkConfig::new(pcs, challenger);
@@ -188,7 +190,7 @@ pub fn prove_m31_poseidon2<
     perm24: Perm24,
 ) -> Result<(), impl Debug>
 where
-    StandardUniform: Distribution<F>,
+    Standard: Distribution<F>,
 {
     let val_mmcs = get_poseidon2_mmcs::<F, _, _>(perm16, perm24.clone());
 

@@ -6,7 +6,7 @@
 Plonky3 is a toolkit which provides a set of primitives, such as polynomial commitment schemes, for implementing polynomial IOPs (PIOPs). It is mainly used to power STARK-based zkVMs, though in principle it may be used for PLONK-based circuits or other PIOPs.
 
 For questions or discussions, please use the Telegram group, [t.me/plonky3](https://t.me/plonky3).
-(SP1 version)
+
 
 ## Status
 

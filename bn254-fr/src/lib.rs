@@ -23,13 +23,14 @@ use p3_field::{
 };
 pub use poseidon2::Poseidon2Bn254;
 use rand::Rng;
-use rand::distr::{Distribution, StandardUniform};
+
+use rand::distributions::{Distribution, Standard};
 use serde::{Deserialize, Deserializer, Serialize};
 
 /// The BN254 curve scalar field prime, defined as `F_r` where `r = 21888242871839275222246405745257275088548364400416034343698204186575808495617`.
 #[derive(Copy, Clone, Default, Eq, PartialEq)]
 pub struct Bn254Fr {
-    pub(crate) value: FFBn254Fr,
+    pub value: FFBn254Fr,
 }
 
 impl Bn254Fr {
@@ -339,12 +340,12 @@ impl Div for Bn254Fr {
     }
 }
 
-impl Distribution<Bn254Fr> for StandardUniform {
+impl Distribution<Bn254Fr> for Standard {
     #[inline]
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Bn254Fr {
         // Simple implementation of rejection sampling:
         loop {
-            let mut trial_element: [u8; 32] = rng.random();
+            let mut trial_element: [u8; 32] = rng.r#gen();
 
             // Set top 2 bits to 0 as bn254 is a 254-bit field.
             // `from_bytes` expects little endian input, so we adjust byte 31:

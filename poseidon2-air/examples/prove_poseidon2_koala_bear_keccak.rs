@@ -11,7 +11,7 @@ use p3_poseidon2_air::{RoundConstants, VectorizedPoseidon2Air};
 use p3_symmetric::{CompressionFunctionFromHasher, PaddingFreeSponge, SerializingHasher};
 use p3_uni_stark::{StarkConfig, prove, verify};
 use rand::SeedableRng;
-use rand::rngs::SmallRng;
+use rand::thread_rng;
 #[cfg(target_family = "unix")]
 use tikv_jemallocator::Jemalloc;
 use tracing_forest::ForestLayer;
@@ -88,8 +88,8 @@ fn prove_and_verify() -> Result<(), impl Debug> {
     let challenger = Challenger::from_hasher(vec![], byte_hash);
 
     // WARNING: DO NOT USE SmallRng in proper applications! Use a real PRNG instead!
-    let mut rng = SmallRng::seed_from_u64(1);
-    let constants = RoundConstants::from_rng(&mut rng);
+    //let mut rng = SmallRng::seed_from_u64(1);
+    let constants = RoundConstants::from_rng(&mut rng());
     let air: VectorizedPoseidon2Air<
         Val,
         GenericPoseidon2LinearLayersKoalaBear,
@@ -108,7 +108,7 @@ fn prove_and_verify() -> Result<(), impl Debug> {
     let dft = Dft::default();
 
     type Pcs = TwoAdicFriPcs<Val, Dft, ValMmcs, ChallengeMmcs>;
-    let pcs = Pcs::new(dft, val_mmcs, fri_config);
+    let pcs = Pcs::new(log2_ceil_usize(trace.height()), dft, val_mmcs, fri_config);
 
     type MyConfig = StarkConfig<Pcs, Challenge, Challenger>;
     let config = MyConfig::new(pcs, challenger);

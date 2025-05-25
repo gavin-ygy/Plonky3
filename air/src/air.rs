@@ -28,8 +28,16 @@ pub trait Air<AB: AirBuilder>: BaseAir<AB::F> {
 
 pub trait AirBuilder: Sized {
     type F: Field;
-
-    type Expr: Algebra<Self::F> + Algebra<Self::Var>;
+	
+	//sp1
+    type Expr: Algebra<Self::F> + Algebra<Self::Var>
+        + From<Self::F>
+        + Add<Self::Var, Output = Self::Expr>
+        + Add<Self::F, Output = Self::Expr>
+        + Sub<Self::Var, Output = Self::Expr>
+        + Sub<Self::F, Output = Self::Expr>
+        + Mul<Self::Var, Output = Self::Expr>
+        + Mul<Self::F, Output = Self::Expr>;
 
     type Var: Into<Self::Expr>
         + Copy
@@ -146,7 +154,9 @@ pub trait PairBuilder: AirBuilder {
 pub trait ExtensionBuilder: AirBuilder {
     type EF: ExtensionField<Self::F>;
 
-    type ExprEF: Algebra<Self::Expr> + Algebra<Self::EF>;
+    //type ExprEF: Algebra<Self::Expr> + Algebra<Self::EF>;
+    //sp1
+    type ExprEF: Algebra<Self::Expr>;
 
     type VarEF: Into<Self::ExprEF> + Copy + Send + Sync;
 
@@ -243,5 +253,14 @@ impl<AB: PermutationAirBuilder> PermutationAirBuilder for FilteredAirBuilder<'_,
 
     fn permutation_randomness(&self) -> &[Self::RandomVar] {
         self.inner.permutation_randomness()
+    }
+}
+
+//sp1
+impl<'a, AB: AirBuilderWithPublicValues> AirBuilderWithPublicValues for FilteredAirBuilder<'a, AB> {
+    type PublicVar = AB::PublicVar;
+
+    fn public_values(&self) -> &[Self::PublicVar] {
+        self.inner.public_values()
     }
 }

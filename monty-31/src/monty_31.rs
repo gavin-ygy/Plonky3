@@ -18,7 +18,7 @@ use p3_field::{
 };
 use p3_util::flatten_to_base;
 use rand::Rng;
-use rand::distr::{Distribution, StandardUniform};
+use rand::distributions::{Distribution, Standard};
 use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::utils::{
@@ -135,7 +135,7 @@ impl<FP: MontyParameters> Debug for MontyField31<FP> {
     }
 }
 
-impl<FP: MontyParameters> Distribution<MontyField31<FP>> for StandardUniform {
+impl<FP: MontyParameters> Distribution<MontyField31<FP>> for Standard {
     #[inline]
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> MontyField31<FP> {
         loop {
@@ -148,14 +148,14 @@ impl<FP: MontyParameters> Distribution<MontyField31<FP>> for StandardUniform {
     }
 }
 
-impl<FP: FieldParameters> Serialize for MontyField31<FP> {
+impl<FP: MontyParameters + FieldParameters> Serialize for MontyField31<FP> {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         // It's faster to Serialize and Deserialize in monty form.
         serializer.serialize_u32(self.value)
     }
 }
 
-impl<'de, FP: FieldParameters> Deserialize<'de> for MontyField31<FP> {
+impl<'de, FP: MontyParameters + FieldParameters> Deserialize<'de> for MontyField31<FP> {
     fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         // It's faster to Serialize and Deserialize in monty form.
         let val = u32::deserialize(d)?;

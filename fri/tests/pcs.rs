@@ -9,12 +9,12 @@ use p3_fri::{FriConfig, TwoAdicFriPcs};
 use p3_matrix::dense::RowMajorMatrix;
 use p3_merkle_tree::MerkleTreeMmcs;
 use p3_symmetric::{PaddingFreeSponge, TruncatedPermutation};
-use rand::distr::{Distribution, StandardUniform};
-use rand::rngs::SmallRng;
+use rand::distributions::{Distribution, Standard};
 use rand::{Rng, SeedableRng};
+use rand_chacha::ChaCha20Rng;
 
 fn seeded_rng() -> impl Rng {
-    SmallRng::seed_from_u64(0)
+    ChaCha20Rng::seed_from_u64(0)
 }
 
 fn do_test_fri_pcs<Val, Challenge, Challenger, P>(
@@ -24,7 +24,7 @@ fn do_test_fri_pcs<Val, Challenge, Challenger, P>(
     P: Pcs<Challenge, Challenger>,
     P::Domain: PolynomialSpace<Val = Val>,
     Val: Field,
-    StandardUniform: Distribution<Val>,
+    Standard: Distribution<Val>,
     Challenge: ExtensionField<Val>,
     Challenger: Clone + CanObserve<P::Commitment> + FieldChallenger<Val>,
 {
@@ -41,7 +41,8 @@ fn do_test_fri_pcs<Val, Challenge, Challenger, P>(
                 .map(|&log_degree| {
                     let d = 1 << log_degree;
                     // random width 5-15
-                    let width = 5 + rng.random_range(0..=10);
+                    //let width = 5 + rng.random_range(0..=10);
+                    let width = 5 + rng.gen_range(0..=10);
                     (
                         pcs.natural_domain_for_degree(d),
                         RowMajorMatrix::<Val>::rand(&mut rng, d, width),
@@ -53,7 +54,7 @@ fn do_test_fri_pcs<Val, Challenge, Challenger, P>(
 
     let (commits_by_round, data_by_round): (Vec<_>, Vec<_>) = domains_and_polys_by_round
         .iter()
-        .map(|domains_and_polys| pcs.commit(domains_and_polys.iter().cloned()))
+        .map(|domains_and_polys| pcs.commit(domains_and_polys.clone()))
         .unzip();
     assert_eq!(commits_by_round.len(), num_rounds);
     assert_eq!(data_by_round.len(), num_rounds);
@@ -184,7 +185,7 @@ mod babybear_fri_pcs {
             mmcs: challenge_mmcs,
         };
 
-        let pcs = MyPcs::new(Dft::default(), val_mmcs, fri_config);
+        let pcs = MyPcs::new(log_blowup, Dft::default(), val_mmcs, fri_config);
         (pcs, Challenger::new(perm))
     }
 

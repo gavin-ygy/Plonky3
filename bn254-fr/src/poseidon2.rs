@@ -12,7 +12,7 @@ use p3_poseidon2::{
     InternalLayerConstructor, Poseidon2, add_rc_and_sbox_generic, external_initial_permute_state,
     external_terminal_permute_state, internal_permute_state,
 };
-
+use serde::{Deserialize, Serialize};
 use crate::Bn254Fr;
 
 /// Degree of the chosen permutation polynomial for BN254, used as the Poseidon2 S-Box.
@@ -34,7 +34,7 @@ pub type Poseidon2Bn254<const WIDTH: usize> = Poseidon2<
 /// Currently we only support a single width for Poseidon2 BN254.
 const BN254_WIDTH: usize = 3;
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Poseidon2InternalLayerBn254 {
     internal_constants: Vec<Bn254Fr>,
 }

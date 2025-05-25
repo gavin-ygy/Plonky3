@@ -356,6 +356,15 @@ pub trait PrimeCharacteristicRing:
     fn zero_vec(len: usize) -> Vec<Self> {
         vec![Self::ZERO; len]
     }
+
+    //for sp1
+    fn try_div<Rhs>(self, rhs: Rhs) -> Option<<Self as Mul<Rhs>>::Output>
+    where
+        Rhs: Field,
+        Self: Mul<Rhs>,
+    {
+        rhs.try_inverse().map(|inv| self * inv)
+    }
 }
 
 /// A vector space `V` over `F` with a fixed basis. Fixing the basis allows elements of `V` to be

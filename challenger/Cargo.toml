@@ -10,6 +10,7 @@ p3-util.workspace = true
 p3-maybe-rayon.workspace = true
 p3-symmetric.workspace = true
 tracing.workspace = true
+serde = { workspace = true, features = ["derive"] }
 
 [dev-dependencies]
 p3-goldilocks.workspace = true

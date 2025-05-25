@@ -29,7 +29,7 @@ where
     type Commitment: Clone + Serialize + DeserializeOwned;
 
     /// Data that the prover stores for committed polynomials, to help the prover with opening.
-    type ProverData;
+    type ProverData: Clone; //sp1
 
     /// Type of the output of `get_evaluations_on_domain`.
     type EvaluationsOnDomain<'a>: Matrix<Val<Self::Domain>> + 'a;

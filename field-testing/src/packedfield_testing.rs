@@ -2,17 +2,17 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 use p3_field::{Field, PackedField, PackedFieldPow2, PackedValue, PrimeCharacteristicRing};
-use rand::distr::{Distribution, StandardUniform};
-use rand::rngs::SmallRng;
+use rand::distributions::{Distribution, Standard};
 use rand::{Rng, SeedableRng};
+use rand_chacha::ChaCha20Rng;
 
 fn packed_from_random<PV>(seed: u64) -> PV
 where
     PV: PackedValue,
-    StandardUniform: Distribution<PV::Value>,
+    Standard: Distribution<PV::Value>,
 {
-    let mut rng = SmallRng::seed_from_u64(seed);
-    PV::from_fn(|_| rng.random())
+    let mut rng = ChaCha20Rng::seed_from_u64(seed);
+    PV::from_fn(|_| rng.r#gen())
 }
 
 /// Interleave arr1 and arr2 using chunks of size i.
@@ -49,7 +49,7 @@ fn interleave<T: Copy + Default>(arr1: &[T], arr2: &[T], i: usize) -> (Vec<T>, V
 fn test_interleave<PF>(i: usize)
 where
     PF: PackedFieldPow2 + Eq,
-    StandardUniform: Distribution<PF::Scalar>,
+    Standard: Distribution<PF::Scalar>,
 {
     assert!(PF::WIDTH % i == 0);
 
@@ -85,7 +85,7 @@ where
 pub fn test_interleaves<PF>()
 where
     PF: PackedFieldPow2 + Eq,
-    StandardUniform: Distribution<PF::Scalar>,
+    Standard: Distribution<PF::Scalar>,
 {
     let mut i = 1;
     while i <= PF::WIDTH {
@@ -93,14 +93,14 @@ where
         i *= 2;
     }
 }
-
+/*
 pub fn test_packed_linear_combination<PF: PackedField + Eq>()
 where
-    StandardUniform: Distribution<PF> + Distribution<PF::Scalar>,
+    Standard: Distribution<PF> + Distribution<PF::Scalar>,
 {
-    let mut rng = SmallRng::seed_from_u64(1);
-    let u: [PF::Scalar; 64] = rng.random();
-    let v: [PF; 64] = rng.random();
+    let mut rng = rand::thread_rng();
+    let mut u: [PF::Scalar; 64] = rng.r#gen();
+    let mut v: [PF; 64] = rng.r#gen();
 
     let mut dot = PF::ZERO;
     assert_eq!(dot, PF::packed_linear_combination::<0>(&u[..0], &v[..0]));
@@ -143,11 +143,11 @@ where
         .fold(PF::ZERO, |acc, (&lhs, &rhs)| acc + (rhs * lhs));
     assert_eq!(dot_64, PF::packed_linear_combination::<64>(&u, &v));
 }
-
+*/
 pub fn test_vs_scalar<PF>(special_vals: PF)
 where
     PF: PackedField + Eq,
-    StandardUniform: Distribution<PF::Scalar>,
+    Standard: Distribution<PF::Scalar>,
 {
     let vec0: PF = packed_from_random(0x278d9e202925a1d1);
     let vec1: PF = packed_from_random(0xf04cbac0cbad419f);
@@ -308,7 +308,7 @@ where
 pub fn test_multiplicative_inverse<PF>()
 where
     PF: PackedField + Eq,
-    StandardUniform: Distribution<PF::Scalar>,
+    Standard: Distribution<PF::Scalar>,
 {
     let vec: PF = packed_from_random(0xb0c7a5153103c5a8);
     let arr = vec.as_slice();

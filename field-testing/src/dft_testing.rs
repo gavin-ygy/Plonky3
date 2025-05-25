@@ -2,18 +2,17 @@ use p3_dft::{NaiveDft, TwoAdicSubgroupDft};
 use p3_field::{ExtensionField, TwoAdicField};
 use p3_matrix::Matrix;
 use p3_matrix::dense::RowMajorMatrix;
-use rand::SeedableRng;
-use rand::distr::{Distribution, StandardUniform};
-use rand::rngs::SmallRng;
+use rand::distributions::{Distribution, Standard};
+use rand::thread_rng;
 
 pub fn test_dft_matches_naive<F, Dft>()
 where
     F: TwoAdicField,
-    StandardUniform: Distribution<F>,
+    Standard: Distribution<F>,
     Dft: TwoAdicSubgroupDft<F>,
 {
     let dft = Dft::default();
-    let mut rng = SmallRng::seed_from_u64(1);
+    let mut rng = rand::thread_rng();
     for log_h in 0..5 {
         let h = 1 << log_h;
         let mat = RowMajorMatrix::<F>::rand(&mut rng, h, 3);
@@ -26,11 +25,11 @@ where
 pub fn test_coset_dft_matches_naive<F, Dft>()
 where
     F: TwoAdicField,
-    StandardUniform: Distribution<F>,
+    Standard: Distribution<F>,
     Dft: TwoAdicSubgroupDft<F>,
 {
     let dft = Dft::default();
-    let mut rng = SmallRng::seed_from_u64(1);
+    let mut rng = rand::thread_rng();
     for log_h in 0..5 {
         let h = 1 << log_h;
         let mat = RowMajorMatrix::<F>::rand(&mut rng, h, 3);
@@ -44,11 +43,11 @@ where
 pub fn test_idft_matches_naive<F, Dft>()
 where
     F: TwoAdicField,
-    StandardUniform: Distribution<F>,
+    Standard: Distribution<F>,
     Dft: TwoAdicSubgroupDft<F>,
 {
     let dft = Dft::default();
-    let mut rng = SmallRng::seed_from_u64(1);
+    let mut rng = rand::thread_rng();
     for log_h in 0..5 {
         let h = 1 << log_h;
         let mat = RowMajorMatrix::<F>::rand(&mut rng, h, 3);
@@ -61,11 +60,11 @@ where
 pub fn test_coset_idft_matches_naive<F, Dft>()
 where
     F: TwoAdicField,
-    StandardUniform: Distribution<F>,
+    Standard: Distribution<F>,
     Dft: TwoAdicSubgroupDft<F>,
 {
     let dft = Dft::default();
-    let mut rng = SmallRng::seed_from_u64(1);
+    let mut rng = rand::thread_rng();
     for log_h in 0..5 {
         let h = 1 << log_h;
         let mat = RowMajorMatrix::<F>::rand(&mut rng, h, 3);
@@ -79,11 +78,11 @@ where
 pub fn test_lde_matches_naive<F, Dft>()
 where
     F: TwoAdicField,
-    StandardUniform: Distribution<F>,
+    Standard: Distribution<F>,
     Dft: TwoAdicSubgroupDft<F>,
 {
     let dft = Dft::default();
-    let mut rng = SmallRng::seed_from_u64(1);
+    let mut rng = rand::thread_rng();
     for log_h in 0..5 {
         let h = 1 << log_h;
         let mat = RowMajorMatrix::<F>::rand(&mut rng, h, 3);
@@ -96,11 +95,11 @@ where
 pub fn test_coset_lde_matches_naive<F, Dft>()
 where
     F: TwoAdicField,
-    StandardUniform: Distribution<F>,
+    Standard: Distribution<F>,
     Dft: TwoAdicSubgroupDft<F>,
 {
     let dft = Dft::default();
-    let mut rng = SmallRng::seed_from_u64(1);
+    let mut rng = rand::thread_rng();
     for log_h in 0..5 {
         let h = 1 << log_h;
         let mat = RowMajorMatrix::<F>::rand(&mut rng, h, 3);
@@ -114,11 +113,11 @@ where
 pub fn test_dft_idft_consistency<F, Dft>()
 where
     F: TwoAdicField,
-    StandardUniform: Distribution<F>,
+    Standard: Distribution<F>,
     Dft: TwoAdicSubgroupDft<F>,
 {
     let dft = Dft::default();
-    let mut rng = SmallRng::seed_from_u64(1);
+    let mut rng = rand::thread_rng();
     for log_h in 0..5 {
         let h = 1 << log_h;
         let original = RowMajorMatrix::<F>::rand(&mut rng, h, 3);
@@ -132,11 +131,11 @@ pub fn test_dft_algebra_matches_naive<F, EF, Dft>()
 where
     F: TwoAdicField,
     EF: ExtensionField<F> + TwoAdicField,
-    StandardUniform: Distribution<EF>,
+    Standard: Distribution<EF>,
     Dft: TwoAdicSubgroupDft<F>,
 {
     let dft = Dft::default();
-    let mut rng = SmallRng::seed_from_u64(1);
+    let mut rng = rand::thread_rng();
     for log_h in 0..5 {
         let h = 1 << log_h;
         let mat = RowMajorMatrix::<EF>::rand(&mut rng, h, 3);
@@ -150,11 +149,11 @@ pub fn test_coset_dft_algebra_matches_naive<F, EF, Dft>()
 where
     F: TwoAdicField,
     EF: ExtensionField<F> + TwoAdicField,
-    StandardUniform: Distribution<EF>,
+    Standard: Distribution<EF>,
     Dft: TwoAdicSubgroupDft<F>,
 {
     let dft = Dft::default();
-    let mut rng = SmallRng::seed_from_u64(1);
+    let mut rng = rand::thread_rng();
     for log_h in 0..5 {
         let h = 1 << log_h;
         let mat = RowMajorMatrix::<EF>::rand(&mut rng, h, 3);
@@ -169,11 +168,11 @@ pub fn test_idft_algebra_matches_naive<F, EF, Dft>()
 where
     F: TwoAdicField,
     EF: ExtensionField<F> + TwoAdicField,
-    StandardUniform: Distribution<EF>,
+    Standard: Distribution<EF>,
     Dft: TwoAdicSubgroupDft<F>,
 {
     let dft = Dft::default();
-    let mut rng = SmallRng::seed_from_u64(1);
+    let mut rng = rand::thread_rng();
     for log_h in 0..5 {
         let h = 1 << log_h;
         let mat = RowMajorMatrix::<EF>::rand(&mut rng, h, 3);
@@ -187,11 +186,11 @@ pub fn test_coset_idft_algebra_matches_naive<F, EF, Dft>()
 where
     F: TwoAdicField,
     EF: ExtensionField<F> + TwoAdicField,
-    StandardUniform: Distribution<EF>,
+    Standard: Distribution<EF>,
     Dft: TwoAdicSubgroupDft<F>,
 {
     let dft = Dft::default();
-    let mut rng = SmallRng::seed_from_u64(1);
+    let mut rng = rand::thread_rng();
     for log_h in 0..5 {
         let h = 1 << log_h;
         let mat = RowMajorMatrix::<EF>::rand(&mut rng, h, 3);
@@ -206,11 +205,11 @@ pub fn test_lde_algebra_matches_naive<F, EF, Dft>()
 where
     F: TwoAdicField,
     EF: ExtensionField<F> + TwoAdicField,
-    StandardUniform: Distribution<EF>,
+    Standard: Distribution<EF>,
     Dft: TwoAdicSubgroupDft<F>,
 {
     let dft = Dft::default();
-    let mut rng = SmallRng::seed_from_u64(1);
+    let mut rng = rand::thread_rng();
     for log_h in 0..5 {
         let h = 1 << log_h;
         let mat = RowMajorMatrix::<EF>::rand(&mut rng, h, 3);
@@ -224,11 +223,11 @@ pub fn test_coset_lde_algebra_matches_naive<F, EF, Dft>()
 where
     F: TwoAdicField,
     EF: ExtensionField<F> + TwoAdicField,
-    StandardUniform: Distribution<EF>,
+    Standard: Distribution<EF>,
     Dft: TwoAdicSubgroupDft<F>,
 {
     let dft = Dft::default();
-    let mut rng = SmallRng::seed_from_u64(1);
+    let mut rng = rand::thread_rng();
     for log_h in 0..5 {
         let h = 1 << log_h;
         let mat = RowMajorMatrix::<EF>::rand(&mut rng, h, 3);
@@ -243,11 +242,11 @@ pub fn test_dft_idft_algebra_consistency<F, EF, Dft>()
 where
     F: TwoAdicField,
     EF: ExtensionField<F> + TwoAdicField,
-    StandardUniform: Distribution<EF>,
+    Standard: Distribution<EF>,
     Dft: TwoAdicSubgroupDft<F>,
 {
     let dft = Dft::default();
-    let mut rng = SmallRng::seed_from_u64(1);
+    let mut rng = rand::thread_rng();
     for log_h in 0..5 {
         let h = 1 << log_h;
         let original = RowMajorMatrix::<EF>::rand(&mut rng, h, 3);

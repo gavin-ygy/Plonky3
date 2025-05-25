@@ -3,8 +3,8 @@ use core::cell::RefCell;
 use core::fmt::Debug;
 
 use itertools::Itertools;
-use p3_challenger::{CanObserve, FieldChallenger, GrindingChallenger};
-use p3_commit::{BatchOpening, Mmcs, OpenedValues, Pcs, PolynomialSpace};
+use p3_challenger::{CanObserve,  CanSample, FieldChallenger, GrindingChallenger};
+use p3_commit::{Mmcs, OpenedValues, Pcs, PolynomialSpace};
 use p3_dft::TwoAdicSubgroupDft;
 use p3_field::coset::TwoAdicMultiplicativeCoset;
 use p3_field::{ExtensionField, Field, TwoAdicField, batch_multiplicative_inverse};
@@ -13,13 +13,13 @@ use p3_matrix::bitrev::{BitReversalPerm, BitReversibleMatrix};
 use p3_matrix::dense::{DenseMatrix, RowMajorMatrix, RowMajorMatrixView};
 use p3_matrix::horizontally_truncated::HorizontallyTruncated;
 use p3_matrix::row_index_mapped::RowIndexMappedView;
-use p3_util::zip_eq::zip_eq;
+
 use rand::Rng;
-use rand::distr::{Distribution, StandardUniform};
+//use rand::distr::{Distribution, StandardUniform};
+use rand::distributions::{Distribution, Standard};
 use tracing::{info_span, instrument};
 
-use crate::verifier::FriError;
-use crate::{FriConfig, FriProof, TwoAdicFriPcs};
+use crate::{FriConfig, TwoAdicFriPcs, TwoAdicFriPcsProof, VerificationError};
 
 /// A hiding FRI PCS. Both MMCSs must also be hiding; this is not enforced at compile time so it's
 /// the user's responsibility to configure.
@@ -51,14 +51,15 @@ impl<Val, Dft, InputMmcs, FriMmcs, Challenge, Challenger, R> Pcs<Challenge, Chal
     for HidingFriPcs<Val, Dft, InputMmcs, FriMmcs, R>
 where
     Val: TwoAdicField,
-    StandardUniform: Distribution<Val>,
+    Standard: Distribution<Val>,
     Dft: TwoAdicSubgroupDft<Val>,
     InputMmcs: Mmcs<Val>,
     FriMmcs: Mmcs<Challenge>,
     Challenge: TwoAdicField + ExtensionField<Val>,
     Challenger:
-        FieldChallenger<Val> + CanObserve<FriMmcs::Commitment> + GrindingChallenger<Witness = Val>,
+        FieldChallenger<Val> + CanSample<Challenge> + CanObserve<FriMmcs::Commitment> + GrindingChallenger<Witness = Val>,
     R: Rng + Send + Sync,
+    <InputMmcs as Mmcs<Val>>::ProverData<RowMajorMatrix<Val>>: Clone,
 {
     type Domain = TwoAdicMultiplicativeCoset<Val>;
     type Commitment = InputMmcs::Commitment;
@@ -71,9 +72,10 @@ where
     /// The second item is the usual FRI proof.
     type Proof = (
         OpenedValues<Challenge>,
-        FriProof<Challenge, FriMmcs, Val, Vec<BatchOpening<Val, InputMmcs>>>,
+        //FriProof_n<Challenge, FriMmcs, Val, Vec<BatchOpening<Val, InputMmcs>>>,
+        TwoAdicFriPcsProof<Val, Challenge, InputMmcs, FriMmcs>,
     );
-    type Error = FriError<FriMmcs::Error, InputMmcs::Error>;
+    type Error = VerificationError<InputMmcs::Error, FriMmcs::Error>;
 
     const ZK: bool = true;
 
@@ -156,7 +158,7 @@ where
         let h = randomized_evaluations[0].height();
         let w = randomized_evaluations[0].width();
         let mut all_random_values = (0..(randomized_evaluations.len() - 1) * h * w)
-            .map(|_| rng.random())
+            .map(|_| rng.r#gen())
             .chain(core::iter::repeat_n(Val::ZERO, h * w))
             .collect::<Vec<_>>();
 
@@ -302,17 +304,9 @@ where
         // Now we merge `opened_values_for_rand_cws` into the opened values in `rounds`, undoing
         // the split that we did in `open`, to get a complete set of opened values for the inner PCS
         // to check.
-        for (round, rand_round) in zip_eq(
-            rounds.iter_mut(),
-            opened_values_for_rand_cws,
-            FriError::InvalidProofShape,
-        )? {
-            for (mat, rand_mat) in
-                zip_eq(round.1.iter_mut(), rand_round, FriError::InvalidProofShape)?
-            {
-                for (point, rand_point) in
-                    zip_eq(mat.1.iter_mut(), rand_mat, FriError::InvalidProofShape)?
-                {
+        for (round, rand_round) in rounds.iter_mut().zip(opened_values_for_rand_cws) {
+            for (mat, rand_mat) in round.1.iter_mut().zip(rand_round) {
+                for (point, rand_point) in mat.1.iter_mut().zip(rand_mat) {
                     point.1.extend(rand_point);
                 }
             }
@@ -348,7 +342,7 @@ fn add_random_cols<Val, R>(
 where
     Val: Field,
     R: Rng + Send + Sync,
-    StandardUniform: Distribution<Val>,
+    Standard: Distribution<Val>,
 {
     let old_w = mat.width();
     let new_w = old_w + num_random_codewords;
@@ -363,7 +357,7 @@ where
         .zip(mat.row_slices())
         .for_each(|(new_row, old_row)| {
             new_row[..old_w].copy_from_slice(old_row);
-            new_row[old_w..].iter_mut().for_each(|v| *v = rng.random());
+            new_row[old_w..].iter_mut().for_each(|v| *v = rng.r#gen());
         });
     result
 }

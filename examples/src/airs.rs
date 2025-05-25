@@ -11,7 +11,7 @@ use p3_uni_stark::{
     DebugConstraintBuilder, ProverConstraintFolder, StarkGenericConfig, SymbolicAirBuilder,
     SymbolicExpression, VerifierConstraintFolder,
 };
-use rand::distr::StandardUniform;
+use rand::distributions::Standard;
 use rand::prelude::Distribution;
 
 /// An enum containing the three different AIR's.
@@ -60,7 +60,7 @@ pub trait ExampleHashAir<F: Field, SC: StarkGenericConfig>:
         extra_capacity_bits: usize,
     ) -> RowMajorMatrix<F>
     where
-        StandardUniform: Distribution<F>;
+        Standard: Distribution<F>;
 }
 
 impl<
@@ -161,7 +161,7 @@ impl<
         extra_capacity_bits: usize,
     ) -> RowMajorMatrix<F>
     where
-        StandardUniform: Distribution<F>,
+        Standard: Distribution<F>,
     {
         match self {
             Self::Blake3(b3_air) => b3_air.generate_trace_rows(num_hashes, extra_capacity_bits),
@@ -189,7 +189,7 @@ impl<
         extra_capacity_bits: usize,
     ) -> RowMajorMatrix<F>
     where
-        StandardUniform: Distribution<F>,
+        Standard: Distribution<F>,
     {
         self.generate_trace_rows(num_hashes, extra_capacity_bits)
     }
@@ -211,7 +211,7 @@ impl<
         extra_capacity_bits: usize,
     ) -> RowMajorMatrix<F>
     where
-        StandardUniform: Distribution<F>,
+        Standard: Distribution<F>,
     {
         self.generate_trace_rows(num_hashes, extra_capacity_bits)
     }
@@ -253,7 +253,7 @@ impl<
         extra_capacity_bits: usize,
     ) -> RowMajorMatrix<F>
     where
-        StandardUniform: Distribution<F>,
+        Standard: Distribution<F>,
     {
         self.generate_vectorized_trace_rows(num_hashes, extra_capacity_bits)
     }
@@ -293,7 +293,7 @@ impl<
         extra_capacity_bits: usize,
     ) -> RowMajorMatrix<F>
     where
-        StandardUniform: Distribution<F>,
+        Standard: Distribution<F>,
     {
         self.generate_trace_rows(num_hashes, extra_capacity_bits)
     }

@@ -21,8 +21,8 @@ use p3_field::{Field, PrimeCharacteristicRing};
 use p3_mds::MdsPermutation;
 use p3_symmetric::Permutation;
 use rand::Rng;
-use rand::distr::{Distribution, StandardUniform};
-
+use rand::distributions::{Distribution, Standard};
+use serde::{Deserialize, Serialize};
 /// Multiply a 4-element vector x by
 /// [ 5 7 1 3 ]
 /// [ 4 6 1 1 ]
@@ -163,7 +163,11 @@ pub fn mds_light_permutation<
 }
 
 /// A struct which stores round-specific constants for both initial and terminal external layers.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]  //sp1
+#[serde(bound(
+    serialize = "T: Serialize, [T; WIDTH]: Serialize",
+    deserialize = "T: Deserialize<'de>, [T; WIDTH]: Deserialize<'de>"
+))]
 pub struct ExternalLayerConstants<T, const WIDTH: usize> {
     /// Constants applied during each initial external round.
     ///
@@ -203,7 +207,7 @@ impl<T, const WIDTH: usize> ExternalLayerConstants<T, WIDTH> {
     /// Panics if `external_round_number` is not even.
     pub fn new_from_rng<R: Rng>(external_round_number: usize, rng: &mut R) -> Self
     where
-        StandardUniform: Distribution<[T; WIDTH]>,
+        Standard: Distribution<[T; WIDTH]>,
     {
         let half_f = external_round_number / 2;
         assert_eq!(
@@ -211,8 +215,8 @@ impl<T, const WIDTH: usize> ExternalLayerConstants<T, WIDTH> {
             external_round_number,
             "The total number of external rounds should be even"
         );
-        let initial_constants = rng.sample_iter(StandardUniform).take(half_f).collect();
-        let terminal_constants = rng.sample_iter(StandardUniform).take(half_f).collect();
+        let initial_constants = rng.sample_iter(Standard).take(half_f).collect();
+        let terminal_constants = rng.sample_iter(Standard).take(half_f).collect();
 
         Self::new(initial_constants, terminal_constants)
     }

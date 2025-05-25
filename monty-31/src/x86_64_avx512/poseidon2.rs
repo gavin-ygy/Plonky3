@@ -19,6 +19,7 @@ use crate::{
     packed_exp_5, packed_exp_7,
 };
 
+use serde::{Deserialize, Serialize};
 // In the internal layers, it is valuable to treat the first entry of the state differently
 // as it is the only entry to which we apply s-box.
 // It seems to help the compiler if we introduce a different data structure for these layers.
@@ -114,13 +115,18 @@ impl<PMP: PackedMontyParameters> InternalLayer24<PMP> {
 /// The packed constants are stored in negative form as this allows some optimizations.
 /// This means given a constant `x`, we treat it as an `i32` and
 /// pack 16 copies of `x - P` into the corresponding `__m512i` packed constant.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(bound(
+    serialize = "MontyField31<PMP>: Serialize, PMP: Serialize, ILP: Serialize",
+    deserialize = "MontyField31<PMP>: Deserialize<'de>, PMP: Deserialize<'de>, ILP: Deserialize<'de>"
+))]
 pub struct Poseidon2InternalLayerMonty31<
     PMP: PackedMontyParameters,
     const WIDTH: usize,
     ILP: InternalLayerParametersAVX512<PMP, WIDTH>,
 > {
     pub(crate) internal_constants: Vec<MontyField31<PMP>>,
+    #[serde(skip)] 
     packed_internal_constants: Vec<__m512i>,
     _phantom: PhantomData<ILP>,
 }
@@ -149,10 +155,16 @@ impl<FP: FieldParameters, const WIDTH: usize, ILP: InternalLayerParametersAVX512
 /// The packed constants are stored in negative form as this allows some optimizations.
 /// This means given a constant `x`, we treat it as an `i32` and
 /// pack 16 copies of `x - P` into the corresponding `__m512i` packed constant.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(bound(
+    serialize = "MontyField31<PMP>: Serialize, PMP: Serialize, [MontyField31<PMP>; WIDTH]: Serialize",
+    deserialize = "MontyField31<PMP>: Deserialize<'de>, PMP: Deserialize<'de>, [MontyField31<PMP>; WIDTH]: Deserialize<'de>"
+))]
 pub struct Poseidon2ExternalLayerMonty31<PMP: PackedMontyParameters, const WIDTH: usize> {
     pub(crate) external_constants: ExternalLayerConstants<MontyField31<PMP>, WIDTH>,
+    #[serde(skip)]
     packed_initial_external_constants: Vec<[__m512i; WIDTH]>,
+    #[serde(skip)]
     packed_terminal_external_constants: Vec<[__m512i; WIDTH]>,
 }
 

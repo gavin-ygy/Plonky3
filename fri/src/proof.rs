@@ -6,23 +6,21 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(bound(
-    serialize = "Witness: Serialize, InputProof: Serialize",
-    deserialize = "Witness: Deserialize<'de>, InputProof: Deserialize<'de>"
+    serialize = "Witness: Serialize",
+    deserialize = "Witness: Deserialize<'de>"
 ))]
-pub struct FriProof<F: Field, M: Mmcs<F>, Witness, InputProof> {
+pub struct FriProof<F: Field, M: Mmcs<F>, Witness> {
     pub commit_phase_commits: Vec<M::Commitment>,
-    pub query_proofs: Vec<QueryProof<F, M, InputProof>>,
-    pub final_poly: Vec<F>,
+    pub query_proofs: Vec<QueryProof<F, M>>,
+    // This could become Vec<FC::Challenge> if this library was generalized to support non-constant
+    // final polynomials.
+    pub final_poly: F,
     pub pow_witness: Witness,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
-#[serde(bound(
-    serialize = "InputProof: Serialize",
-    deserialize = "InputProof: Deserialize<'de>",
-))]
-pub struct QueryProof<F: Field, M: Mmcs<F>, InputProof> {
-    pub input_proof: InputProof,
+#[serde(bound = "")]
+pub struct QueryProof<F: Field, M: Mmcs<F>> {
     /// For each commit phase commitment, this contains openings of a commit phase codeword at the
     /// queried location, along with an opening proof.
     pub commit_phase_openings: Vec<CommitPhaseProofStep<F, M>>,

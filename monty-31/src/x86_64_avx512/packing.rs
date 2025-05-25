@@ -17,7 +17,7 @@ use p3_field::{
 };
 use p3_util::reconstitute_from_base;
 use rand::Rng;
-use rand::distr::{Distribution, StandardUniform};
+use rand::distributions::{Distribution, Standard};
 
 use crate::{FieldParameters, MontyField31, PackedMontyParameters, RelativelyPrimePower};
 
@@ -1248,10 +1248,10 @@ impl<PMP: PackedMontyParameters> Sub<PackedMontyField31AVX512<PMP>> for MontyFie
     }
 }
 
-impl<PMP: PackedMontyParameters> Distribution<PackedMontyField31AVX512<PMP>> for StandardUniform {
+impl<PMP: PackedMontyParameters> Distribution<PackedMontyField31AVX512<PMP>> for Standard {
     #[inline]
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> PackedMontyField31AVX512<PMP> {
-        PackedMontyField31AVX512::<PMP>(rng.random())
+        PackedMontyField31AVX512::<PMP>(rng.r#gen())
     }
 }
 

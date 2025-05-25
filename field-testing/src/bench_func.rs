@@ -3,20 +3,20 @@ use alloc::vec::Vec;
 
 use criterion::{BatchSize, Criterion, black_box};
 use p3_field::{Field, PrimeCharacteristicRing};
-use rand::distr::StandardUniform;
+use rand::Rng;
+use rand::distributions::Standard;
 use rand::prelude::Distribution;
-use rand::rngs::SmallRng;
-use rand::{Rng, SeedableRng};
+use core::array;
 
 /// Not useful for benchmarking prime fields as multiplication is too fast but
 /// handy for extension fields.
 pub fn benchmark_mul<F: Field>(c: &mut Criterion, name: &str)
 where
-    StandardUniform: Distribution<F>,
+    Standard: Distribution<F>,
 {
-    let mut rng = SmallRng::seed_from_u64(1);
-    let x = rng.random::<F>();
-    let y = rng.random::<F>();
+    let mut rng = rand::thread_rng();
+    let x :F = rng.r#gen();
+    let y :F = rng.r#gen();
     c.bench_function(&format!("{} mul", name), |b| {
         b.iter(|| black_box(black_box(x) * black_box(y)))
     });
@@ -24,10 +24,10 @@ where
 
 pub fn benchmark_square<F: Field>(c: &mut Criterion, name: &str)
 where
-    StandardUniform: Distribution<F>,
+    Standard: Distribution<F>,
 {
-    let mut rng = SmallRng::seed_from_u64(1);
-    let x = rng.random::<F>();
+    let mut rng = rand::thread_rng();
+    let x :F = rng.r#gen();
     c.bench_function(&format!("{} square", name), |b| {
         b.iter(|| black_box(black_box(x).square()))
     });
@@ -35,43 +35,47 @@ where
 
 pub fn benchmark_inv<F: Field>(c: &mut Criterion, name: &str)
 where
-    StandardUniform: Distribution<F>,
+    Standard: Distribution<F>,
 {
-    let mut rng = SmallRng::seed_from_u64(1);
-    let x = rng.random::<F>();
+    let mut rng = rand::thread_rng();
+    let x :F = rng.r#gen();
     c.bench_function(&format!("{} inv", name), |b| {
         b.iter(|| black_box(black_box(x)).inverse())
     });
 }
 
-pub fn benchmark_mul_2exp<R: PrimeCharacteristicRing + Copy, const REPS: usize>(
+pub fn benchmark_mul_2exp<F: PrimeCharacteristicRing + Copy, const REPS: usize>(
     c: &mut Criterion,
     name: &str,
     val: u64,
 ) where
-    StandardUniform: Distribution<R>,
+    Standard: Distribution<F>,
 {
-    let mut rng = SmallRng::seed_from_u64(1);
-    let mut input = Vec::new();
+    let mut rng = rand::thread_rng();
+    let mut input: Vec<[F; REPS]> = Vec::new();
     for _ in 0..REPS {
-        input.push(rng.random::<R>())
+         input.push(array::from_fn(|_| rng.r#gen::<F>()))
     }
     c.bench_function(&format!("{} mul_2exp_u64 {}", name, val), |b| {
-        b.iter(|| input.iter_mut().for_each(|i| *i = i.mul_2exp_u64(val)))
+        b.iter(|| input.iter_mut().for_each(|i| {
+            i.iter_mut().for_each(|x| *x = x.mul_2exp_u64(val))
+        }))
     });
 }
 
 pub fn benchmark_div_2exp<F: Field, const REPS: usize>(c: &mut Criterion, name: &str, val: u64)
 where
-    StandardUniform: Distribution<F>,
+    Standard: Distribution<F>,
 {
-    let mut rng = SmallRng::seed_from_u64(1);
-    let mut input = Vec::new();
+    let mut rng = rand::thread_rng();
+    let mut input: Vec<[F; REPS]> = Vec::new();
     for _ in 0..REPS {
-        input.push(rng.random::<F>())
+         input.push(array::from_fn(|_| rng.r#gen::<F>()))
     }
     c.bench_function(&format!("{} div_2exp_u64 {}", name, val), |b| {
-        b.iter(|| input.iter_mut().for_each(|i| *i = i.div_2exp_u64(val)))
+        b.iter(|| input.iter_mut().for_each(|i| {
+            i.iter_mut().for_each(|x| *x = x.div_2exp_u64(val))
+        }))
     });
 }
 
@@ -80,20 +84,20 @@ where
 ///
 /// Making N larger and REPS smaller (vs the opposite) leans the benchmark more sensitive towards
 /// the latency (resp throughput) of the sum method.
-pub fn benchmark_iter_sum<R: PrimeCharacteristicRing + Copy, const N: usize, const REPS: usize>(
+pub fn benchmark_iter_sum<F: PrimeCharacteristicRing + Copy, const N: usize, const REPS: usize>(
     c: &mut Criterion,
     name: &str,
 ) where
-    StandardUniform: Distribution<R>,
+    Standard: Distribution<F>,
 {
-    let mut rng = SmallRng::seed_from_u64(1);
-    let mut input = Vec::new();
+    let mut rng = rand::thread_rng();
+    let mut input: Vec<[F; N]> = Vec::new();
     for _ in 0..REPS {
-        input.push(rng.random::<[R; N]>())
+         input.push(array::from_fn(|_| rng.r#gen::<F>()))
     }
     c.bench_function(&format!("{} sum/{}, {}", name, REPS, N), |b| {
         b.iter(|| {
-            let mut acc = R::ZERO;
+            let mut acc = F::ZERO;
             for row in &mut input {
                 acc += row.iter().copied().sum()
             }
@@ -107,22 +111,22 @@ pub fn benchmark_iter_sum<R: PrimeCharacteristicRing + Copy, const N: usize, con
 ///
 /// Making N larger and REPS smaller (vs the opposite) leans the benchmark more sensitive towards
 /// the latency (resp throughput) of the sum method.
-pub fn benchmark_sum_array<R: PrimeCharacteristicRing + Copy, const N: usize, const REPS: usize>(
+pub fn benchmark_sum_array<F: PrimeCharacteristicRing + Copy, const N: usize, const REPS: usize>(
     c: &mut Criterion,
     name: &str,
 ) where
-    StandardUniform: Distribution<R>,
+    Standard: Distribution<F>,
 {
-    let mut rng = SmallRng::seed_from_u64(1);
-    let mut input = Vec::new();
+    let mut rng = rand::thread_rng();
+    let mut input: Vec<[F; N]> = Vec::new();
     for _ in 0..REPS {
-        input.push(rng.random::<[R; N]>())
+         input.push(array::from_fn(|_| rng.r#gen::<F>()))
     }
     c.bench_function(&format!("{} tree sum/{}, {}", name, REPS, N), |b| {
         b.iter(|| {
-            let mut acc = R::ZERO;
+            let mut acc = F::ZERO;
             for row in &mut input {
-                acc += R::sum_array::<N>(row)
+                acc += F::sum_array::<N>(row)
             }
             acc
         })
@@ -133,38 +137,39 @@ pub fn benchmark_sum_array<R: PrimeCharacteristicRing + Copy, const N: usize, co
 ///
 /// These numbers get more trustworthy as N increases. Small N leads to the
 /// computation being too fast to be measured accurately.
-pub fn benchmark_dot_array<R: PrimeCharacteristicRing + Copy, const N: usize>(
+pub fn benchmark_dot_array<F: PrimeCharacteristicRing + Copy, const N: usize>(
     c: &mut Criterion,
     name: &str,
 ) where
-    StandardUniform: Distribution<R>,
+    Standard: Distribution<F>,
 {
-    let mut rng = SmallRng::seed_from_u64(1);
-    let lhs = rng.random::<[R; N]>();
-    let rhs = rng.random::<[R; N]>();
+    let mut rng = rand::thread_rng();
+    //let mut input1: [F; 16] = rng.r#gen();
+    let mut lhs: [F; N] = array::from_fn(|_| rng.r#gen());
+    let mut rhs: [F; N] = array::from_fn(|_| rng.r#gen());
 
     c.bench_function(&format!("{} dot product/{}", name, N), |b| {
-        b.iter(|| black_box(R::dot_product(black_box(&lhs), black_box(&rhs))))
+        b.iter(|| black_box(F::dot_product(black_box(&lhs), black_box(&rhs))))
     });
 }
-
-pub fn benchmark_add_latency<R: PrimeCharacteristicRing + Copy, const N: usize>(
+/* //TBD:merge
+pub fn benchmark_add_latency<F: PrimeCharacteristicRing + Copy, const N: usize>(
     c: &mut Criterion,
     name: &str,
 ) where
-    StandardUniform: Distribution<R>,
+    Standard: Distribution<F>,
 {
     c.bench_function(&format!("add-latency/{} {}", N, name), |b| {
         b.iter_batched(
             || {
-                let mut rng = SmallRng::seed_from_u64(1);
-                let mut vec = Vec::new();
+                let mut rng = rand::thread_rng();
+    			let mut vec: Vec<[F; N]> = Vec::new();
                 for _ in 0..N {
-                    vec.push(rng.random::<R>())
+                    vec.push(array::from_fn(|_| rng.r#gen::<F>()))
                 }
                 vec
             },
-            |x| x.iter().fold(R::ZERO, |x, y| x + *y),
+            |x| x.iter().fold(F::ZERO, |x, y| x + *y),
             BatchSize::SmallInput,
         )
     });
@@ -348,3 +353,4 @@ pub fn benchmark_mul_throughput<R: PrimeCharacteristicRing + Copy, const N: usiz
         )
     });
 }
+*/

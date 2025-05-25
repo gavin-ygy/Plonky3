@@ -10,8 +10,8 @@ use p3_merkle_tree::MerkleTreeHidingMmcs;
 use p3_poseidon2_air::{RoundConstants, VectorizedPoseidon2Air};
 use p3_symmetric::{CompressionFunctionFromHasher, PaddingFreeSponge, SerializingHasher};
 use p3_uni_stark::{StarkConfig, prove, verify};
-use rand::SeedableRng;
-use rand::rngs::SmallRng;
+use rand::rngs::{StdRng, ThreadRng};
+use rand::{SeedableRng, rng};
 #[cfg(target_family = "unix")]
 use tikv_jemallocator::Jemalloc;
 use tracing_forest::ForestLayer;
@@ -71,9 +71,7 @@ fn main() -> Result<(), impl Debug> {
         4,
         4,
     >;
-    let mut rng = SmallRng::seed_from_u64(1);
-    let constants = RoundConstants::from_rng(&mut rng);
-    let val_mmcs = ValMmcs::new(field_hash, compress, rng);
+    let val_mmcs = ValMmcs::new(field_hash, compress, rng());
 
     type ChallengeMmcs = ExtensionMmcs<Val, Challenge, ValMmcs>;
     let challenge_mmcs = ChallengeMmcs::new(val_mmcs.clone());
@@ -81,6 +79,7 @@ fn main() -> Result<(), impl Debug> {
     type Challenger = SerializingChallenger32<Val, HashChallenger<u8, ByteHash, 32>>;
     let challenger = Challenger::from_hasher(vec![], byte_hash);
 
+    let constants = RoundConstants::from_rng(&mut rng());
     let air: VectorizedPoseidon2Air<
         Val,
         GenericPoseidon2LinearLayersBabyBear,
@@ -98,9 +97,11 @@ fn main() -> Result<(), impl Debug> {
 
     let dft = Dft::default();
 
-    type Pcs = HidingFriPcs<Val, Dft, ValMmcs, ChallengeMmcs, SmallRng>;
-    let pcs = Pcs::new(dft, val_mmcs, fri_config, 4, SmallRng::seed_from_u64(1));
-
+    //type Pcs = HidingFriPcs<Val, Dft, ValMmcs, ChallengeMmcs, StdRng>; //p3 latest
+    type Pcs = TwoAdicFriPcs<Val, Dft, ValMmcs, ChallengeMmcs>;  //p3 old
+    
+    let pcs = Pcs::new(log2_ceil_usize(trace.height()), dft, val_mmcs, fri_config, 4, StdRng::from_os_rng());
+	let mut challenger = Challenger::from_hasher(vec![], byte_hash);
     type MyConfig = StarkConfig<Pcs, Challenge, Challenger>;
     let config = MyConfig::new(pcs, challenger);
 

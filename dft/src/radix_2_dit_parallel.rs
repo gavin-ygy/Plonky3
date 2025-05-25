@@ -1,9 +1,10 @@
 use alloc::collections::BTreeMap;
 use alloc::slice;
 use alloc::vec::Vec;
-use core::cell::RefCell;
-use core::mem::{MaybeUninit, transmute};
-
+// use core::cell::RefCell;  //sp1
+use core::mem::{transmute, MaybeUninit};
+use alloc::sync::Arc;
+use spin::RwLock;  //sp1
 use itertools::{Itertools, izip};
 use p3_field::integers::QuotientMap;
 use p3_field::{Field, Powers, TwoAdicField};
@@ -28,14 +29,15 @@ use crate::butterflies::{Butterfly, DitButterfly};
 #[derive(Default, Clone, Debug)]
 pub struct Radix2DitParallel<F> {
     /// Twiddles based on roots of unity, used in the forward DFT.
-    twiddles: RefCell<BTreeMap<usize, VectorPair<F>>>,
+    //twiddles: RefCell<BTreeMap<usize, VectorPair<F>>>,
+    twiddles: Arc<RwLock<BTreeMap<usize, VectorPair<F>>>>,//sp1 sync
 
     /// A map from `(log_h, shift)` to forward DFT twiddles with that coset shift baked in.
     #[allow(clippy::type_complexity)]
-    coset_twiddles: RefCell<BTreeMap<(usize, F), Vec<Vec<F>>>>,
+    coset_twiddles: Arc<RwLock<BTreeMap<(usize, F), Vec<Vec<F>>>>>,
 
     /// Twiddles based on inverse roots of unity, used in the inverse DFT.
-    inverse_twiddles: RefCell<BTreeMap<usize, VectorPair<F>>>,
+    inverse_twiddles: Arc<RwLock<BTreeMap<usize, VectorPair<F>>>>,
 }
 
 /// A pair of vectors, one with twiddle factors in their natural order, the other bit-reversed.
@@ -108,7 +110,7 @@ impl<F: TwoAdicField + Ord> TwoAdicSubgroupDft<F> for Radix2DitParallel<F> {
         let log_h = log2_strict_usize(h);
 
         // Compute twiddle factors, or take memoized ones if already available.
-        let mut twiddles_ref_mut = self.twiddles.borrow_mut();
+        let mut twiddles_ref_mut = self.twiddles.write();
         let twiddles = twiddles_ref_mut
             .entry(log_h)
             .or_insert_with(|| compute_twiddles(log_h));
@@ -138,7 +140,8 @@ impl<F: TwoAdicField + Ord> TwoAdicSubgroupDft<F> for Radix2DitParallel<F> {
         let log_h = log2_strict_usize(h);
         let mid = log_h.div_ceil(2);
 
-        let mut inverse_twiddles_ref_mut = self.inverse_twiddles.borrow_mut();
+        //let mut inverse_twiddles_ref_mut = self.inverse_twiddles.borrow_mut();
+	    let mut inverse_twiddles_ref_mut = self.inverse_twiddles.write();
         let inverse_twiddles = inverse_twiddles_ref_mut
             .entry(log_h)
             .or_insert_with(|| compute_inverse_twiddles(log_h));
@@ -201,7 +204,7 @@ fn coset_dft<F: TwoAdicField + Ord>(
     let log_h = log2_strict_usize(mat.height());
     let mid = log_h.div_ceil(2);
 
-    let mut twiddles_ref_mut = dft.coset_twiddles.borrow_mut();
+    let mut twiddles_ref_mut = dft.coset_twiddles.write();
     let twiddles = twiddles_ref_mut
         .entry((log_h, shift))
         .or_insert_with(|| compute_coset_twiddles(log_h, shift));
@@ -239,7 +242,7 @@ fn coset_dft_oop<F: TwoAdicField + Ord>(
 
     let mid = log_h.div_ceil(2);
 
-    let mut twiddles_ref_mut = dft.coset_twiddles.borrow_mut();
+    let mut twiddles_ref_mut = dft.coset_twiddles.write();
     let twiddles = twiddles_ref_mut
         .entry((log_h, shift))
         .or_insert_with(|| compute_coset_twiddles(log_h, shift));

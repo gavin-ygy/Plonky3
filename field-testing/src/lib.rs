@@ -20,21 +20,20 @@ use p3_field::{
 };
 use p3_util::iter_array_chunks_padded;
 pub use packedfield_testing::*;
-use rand::distr::{Distribution, StandardUniform};
-use rand::rngs::SmallRng;
-use rand::{Rng, SeedableRng};
+use rand::Rng;
+use rand::distributions::{Distribution, Standard};
 
 #[allow(clippy::eq_op)]
 pub fn test_ring_with_eq<R: PrimeCharacteristicRing + Copy + Eq>(zeros: &[R], ones: &[R])
 where
-    StandardUniform: Distribution<R> + Distribution<[R; 16]>,
+    Standard: Distribution<R> + Distribution<[R; 16]>,
 {
     // zeros should be a vector containing different representatives of `R::ZERO`.
     // ones should be a vector containing different representatives of `R::ONE`.
-    let mut rng = SmallRng::seed_from_u64(1);
-    let x = rng.random::<R>();
-    let y = rng.random::<R>();
-    let z = rng.random::<R>();
+    let mut rng = rand::thread_rng();
+    let x = rng.r#gen::<R>();
+    let y = rng.r#gen::<R>();
+    let z = rng.r#gen::<R>();
     assert_eq!(R::ONE + R::NEG_ONE, R::ZERO, "Error 1 + (-1) =/= 0");
     assert_eq!(R::NEG_ONE + R::TWO, R::ONE, "Error -1 + 2 =/= 1");
     assert_eq!(x + (-x), R::ZERO, "Error x + (-x) =/= 0");
@@ -166,8 +165,8 @@ where
         "Error when testing distributivity of sub and right mul."
     );
 
-    let vec1: [R; 64] = rng.random();
-    let vec2: [R; 64] = rng.random();
+    let vec1: [R; 64] = array::from_fn(|_| rng.r#gen());
+    let vec2: [R; 64] = array::from_fn(|_| rng.r#gen());
     test_sums(&vec1[..16].try_into().unwrap());
     test_dot_product(&vec1, &vec2);
 
@@ -217,12 +216,12 @@ where
 
 pub fn test_inv_div<F: Field>()
 where
-    StandardUniform: Distribution<F>,
+    Standard: Distribution<F>,
 {
-    let mut rng = SmallRng::seed_from_u64(1);
-    let x = rng.random::<F>();
-    let y = rng.random::<F>();
-    let z = rng.random::<F>();
+    let mut rng = rand::thread_rng();
+    let x = rng.r#gen::<F>();
+    let y = rng.r#gen::<F>();
+    let z = rng.r#gen::<F>();
     assert_eq!(x, x.halve() * F::TWO);
     assert_eq!(x * x.inverse(), F::ONE);
     assert_eq!(x.inverse() * x, F::ONE);
@@ -234,10 +233,10 @@ where
 
 pub fn test_mul_2exp_u64<R: PrimeCharacteristicRing + Eq>()
 where
-    StandardUniform: Distribution<R>,
+    Standard: Distribution<R>,
 {
-    let mut rng = SmallRng::seed_from_u64(1);
-    let x = rng.random::<R>();
+   let mut rng = rand::thread_rng();
+    let x = rng.r#gen::<R>();
     assert_eq!(x.mul_2exp_u64(0), x);
     assert_eq!(x.mul_2exp_u64(1), x.double());
     for i in 0..128 {
@@ -250,10 +249,10 @@ where
 
 pub fn test_div_2exp_u64<F: Field>()
 where
-    StandardUniform: Distribution<F>,
+    Standard: Distribution<F>,
 {
-    let mut rng = SmallRng::seed_from_u64(1);
-    let x = rng.random::<F>();
+    let mut rng = rand::thread_rng();
+    let x = rng.r#gen::<F>();
     assert_eq!(x.div_2exp_u64(0), x);
     assert_eq!(x.div_2exp_u64(1), x.halve());
     for i in 0..128 {
@@ -268,13 +267,13 @@ where
 
 pub fn test_inverse<F: Field>()
 where
-    StandardUniform: Distribution<F>,
+    Standard: Distribution<F>,
 {
     assert_eq!(None, F::ZERO.try_inverse());
     assert_eq!(Some(F::ONE), F::ONE.try_inverse());
-    let mut rng = SmallRng::seed_from_u64(1);
+    let mut rng = rand::thread_rng();
     for _ in 0..1000 {
-        let x = rng.random::<F>();
+        let x = rng.r#gen::<F>();
         if !x.is_zero() && !x.is_one() {
             let z = x.inverse();
             assert_ne!(x, z);
@@ -583,10 +582,10 @@ pub fn test_ef_two_adic_generator_consistency<
 
 pub fn test_into_bytes_32<F: PrimeField32>(zeros: &[F], ones: &[F])
 where
-    StandardUniform: Distribution<F>,
+    Standard: Distribution<F>,
 {
-    let mut rng = SmallRng::seed_from_u64(1);
-    let x = rng.random::<F>();
+    let mut rng = rand::thread_rng();
+    let x = rng.r#gen::<F>();
 
     assert_eq!(
         x.into_bytes().into_iter().collect::<Vec<_>>(),
@@ -605,10 +604,10 @@ where
 
 pub fn test_into_bytes_64<F: PrimeField64>(zeros: &[F], ones: &[F])
 where
-    StandardUniform: Distribution<F>,
+    Standard: Distribution<F>,
 {
-    let mut rng = SmallRng::seed_from_u64(1);
-    let x = rng.random::<F>();
+    let mut rng = rand::thread_rng();
+    let x = rng.r#gen::<F>();
 
     assert_eq!(
         x.into_bytes().into_iter().collect::<Vec<_>>(),
@@ -627,10 +626,12 @@ where
 
 pub fn test_into_stream<F: Field>()
 where
-    StandardUniform: Distribution<[F; 16]>,
+    Standard: Distribution<F>,
 {
-    let mut rng = SmallRng::seed_from_u64(1);
-    let xs: [F; 16] = rng.random();
+    //let mut rng = SmallRng::seed_from_u64(1);
+    //let xs: [F; 16] = rng.random();
+    let mut rng = rand::thread_rng();
+    let xs: [F; 16]  = array::from_fn(|_| rng.r#gen());
 
     let byte_vec = F::into_byte_stream(xs).into_iter().collect::<Vec<_>>();
     let u32_vec = F::into_u32_stream(xs).into_iter().collect::<Vec<_>>();
@@ -651,8 +652,8 @@ where
     assert_eq!(u32_vec, expected_u32s);
     assert_eq!(u64_vec, expected_u64s);
 
-    let ys: [F; 16] = rng.random();
-    let zs: [F; 16] = rng.random();
+    let ys: [F; 16] = array::from_fn(|_| rng.r#gen());
+    let zs: [F; 16] = array::from_fn(|_| rng.r#gen());
 
     let combs: [[F; 3]; 16] = array::from_fn(|i| [xs[i], ys[i], zs[i]]);
 
@@ -758,13 +759,12 @@ macro_rules! test_prime_field_64 {
         mod from_integer_tests_prime_field_64 {
             use p3_field::integers::QuotientMap;
             use p3_field::{Field, PrimeCharacteristicRing, PrimeField64, RawDataSerializable};
-            use rand::rngs::SmallRng;
-            use rand::{Rng, SeedableRng};
+            use rand::Rng;
 
             #[test]
             fn test_as_canonical_u64() {
-                let mut rng = SmallRng::seed_from_u64(1);
-                let x: u64 = rng.random();
+                let mut rng = rand::thread_rng();
+                let x: u64 = rng.r#gen();
                 let x_mod_order = x % <$field>::ORDER_U64;
 
                 assert_eq!(<$field>::ZERO.as_canonical_u64(), 0);
@@ -830,13 +830,12 @@ macro_rules! test_prime_field_32 {
         mod from_integer_tests_prime_field_32 {
             use p3_field::integers::QuotientMap;
             use p3_field::{Field, PrimeCharacteristicRing, PrimeField32, PrimeField64};
-            use rand::rngs::SmallRng;
-            use rand::{Rng, SeedableRng};
+            use rand::Rng;
 
             #[test]
             fn test_as_canonical_u32() {
-                let mut rng = SmallRng::seed_from_u64(1);
-                let x: u32 = rng.random();
+                let mut rng = rand::thread_rng();
+                let x: u32 = rng.r#gen();
                 let x_mod_order = x % <$field>::ORDER_U32;
 
                 for zero in $zeros {

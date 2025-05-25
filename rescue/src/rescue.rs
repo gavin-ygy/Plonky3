@@ -6,7 +6,7 @@ use p3_field::{Algebra, PermutationMonomial, PrimeField, PrimeField64};
 use p3_mds::MdsPermutation;
 use p3_symmetric::{CryptographicPermutation, Permutation};
 use rand::Rng;
-use rand::distr::StandardUniform;
+use rand::distributions::Standard;
 use rand::prelude::Distribution;
 
 use crate::util::{log2_binom, shake256_hash};
@@ -66,10 +66,10 @@ where
     // For a general field, we provide a generic constructor for the round constants.
     pub fn get_round_constants_from_rng<R: Rng>(num_rounds: usize, rng: &mut R) -> Vec<F>
     where
-        StandardUniform: Distribution<F>,
+        Standard: Distribution<F>,
     {
         let num_constants = 2 * WIDTH * num_rounds;
-        rng.sample_iter(StandardUniform)
+        rng.sample_iter(Standard)
             .take(num_constants)
             .collect()
     }

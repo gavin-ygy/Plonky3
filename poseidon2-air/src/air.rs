@@ -6,9 +6,9 @@ use p3_field::{Field, PrimeCharacteristicRing, PrimeField};
 use p3_matrix::Matrix;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_poseidon2::GenericPoseidon2LinearLayers;
-use rand::distr::{Distribution, StandardUniform};
-use rand::rngs::SmallRng;
-use rand::{Rng, SeedableRng};
+use rand::distributions::{Distribution, Standard};
+use rand::{thread_rng, Rng};
+ use alloc::vec::Vec;
 
 use crate::columns::{Poseidon2Cols, num_cols};
 use crate::constants::RoundConstants;
@@ -65,10 +65,14 @@ impl<
     where
         F: PrimeField,
         LinearLayers: GenericPoseidon2LinearLayers<F, WIDTH>,
-        StandardUniform: Distribution<[F; WIDTH]>,
+        Standard: Distribution<F>,
     {
-        let mut rng = SmallRng::seed_from_u64(1);
-        let inputs = (0..num_hashes).map(|_| rng.random()).collect();
+        let mut rng = rand::thread_rng();
+        let inputs: Vec<[F; WIDTH]> = (0..num_hashes)
+            .map(|_| {
+                [(); WIDTH].map(|_| rng.r#gen())
+            })
+            .collect();
         generate_trace_rows::<
             _,
             LinearLayers,

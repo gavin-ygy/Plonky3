@@ -55,6 +55,21 @@ pub fn matmul_internal<F: Field, A: Algebra<F>, const WIDTH: usize>(
     }
 }
 
+
+pub fn matmul_internal_sp1<F: PrimeCharacteristicRing, A: Algebra<F>, const WIDTH: usize>(
+    state: &mut [A; WIDTH],
+    mat_internal_diag_m_1: [F; WIDTH],
+) {
+    let sum: A = A::sum_array::<WIDTH>(state);
+    for i in 0..WIDTH {
+        state[i] *= mat_internal_diag_m_1[i].clone();
+        state[i] += sum.clone();
+    }
+
+}
+
+
+
 /// A trait containing all data needed to implement the internal layers of Poseidon2.
 pub trait InternalLayer<R, const WIDTH: usize, const D: u64>: Sync + Clone
 where

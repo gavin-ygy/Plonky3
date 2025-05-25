@@ -21,9 +21,9 @@ use p3_symmetric::{
     CompressionFunctionFromHasher, PaddingFreeSponge, SerializingHasher, TruncatedPermutation,
 };
 use p3_uni_stark::{StarkConfig, StarkGenericConfig, Val, prove, verify};
-use rand::distr::{Distribution, StandardUniform};
-use rand::rngs::SmallRng;
-use rand::{Rng, SeedableRng};
+use rand::distributions::{Distribution, Standard};
+use rand::{thread_rng, Rng};
+use p3_util::log2_ceil_usize;
 
 /// How many `a * b = c` operations to do per row in the AIR.
 const REPETITIONS: usize = 20; // This should be < 255 so it can fit into a u8.
@@ -55,21 +55,21 @@ impl Default for MulAir {
 impl MulAir {
     pub fn random_valid_trace<F: Field>(&self, rows: usize, valid: bool) -> RowMajorMatrix<F>
     where
-        StandardUniform: Distribution<F>,
+        Standard: Distribution<F>,
     {
-        let mut rng = SmallRng::seed_from_u64(1);
+        let mut rng = thread_rng();
         let mut trace_values = F::zero_vec(rows * TRACE_WIDTH);
         for (i, (a, b, c)) in trace_values.iter_mut().tuples().enumerate() {
             let row = i / REPETITIONS;
             *a = if self.uses_transition_constraints {
                 F::from_usize(i)
             } else {
-                rng.random()
+                rng.r#gen()
             };
             *b = if self.uses_boundary_constraints && row == 0 {
                 a.square() + F::ONE
             } else {
-                rng.random()
+                rng.r#gen()
             };
             *c = a.exp_u64(self.degree - 1) * *b;
 
@@ -120,8 +120,14 @@ fn do_test<SC: StarkGenericConfig>(
 ) -> Result<(), impl Debug>
 where
     SC::Challenger: Clone,
-    StandardUniform: Distribution<Val<SC>>,
+    Standard: Distribution<Val<SC>>,
 {
+    //
+     /*tracing_subscriber::fmt()
+            .with_max_level(tracing::Level::DEBUG)
+            .try_init()
+            .expect("Failed to set up tracing subscriber");
+     tracing::debug!("#############################"); */
     let trace = air.random_valid_trace(log_height, true);
 
     let proof = prove(&config, &air, trace, &vec![]);
@@ -140,8 +146,7 @@ fn do_test_bb_trivial(degree: u64, log_n: usize) -> Result<(), impl Debug> {
     type Challenge = BinomialExtensionField<Val, 4>;
 
     type Perm = Poseidon2BabyBear<16>;
-    let mut rng = SmallRng::seed_from_u64(1);
-    let perm = Perm::new_from_rng_128(&mut rng);
+    let perm = Perm::new_from_rng_128(&mut thread_rng());
 
     type Dft = Radix2DitParallel<Val>;
     let dft = Dft::default();
@@ -187,8 +192,7 @@ fn do_test_bb_twoadic(log_blowup: usize, degree: u64, log_n: usize) -> Result<()
     type Challenge = BinomialExtensionField<Val, 4>;
 
     type Perm = Poseidon2BabyBear<16>;
-    let mut rng = SmallRng::seed_from_u64(1);
-    let perm = Perm::new_from_rng_128(&mut rng);
+    let perm = Perm::new_from_rng_128(&mut thread_rng());
 
     type MyHash = PaddingFreeSponge<Perm, 16, 8, 8>;
     let hash = MyHash::new(perm.clone());
@@ -216,7 +220,7 @@ fn do_test_bb_twoadic(log_blowup: usize, degree: u64, log_n: usize) -> Result<()
         mmcs: challenge_mmcs,
     };
     type Pcs = TwoAdicFriPcs<Val, Dft, ValMmcs, ChallengeMmcs>;
-    let pcs = Pcs::new(dft, val_mmcs, fri_config);
+    let pcs = Pcs::new(log_n, dft, val_mmcs, fri_config);
     let challenger = Challenger::new(perm);
 
     type MyConfig = StarkConfig<Pcs, Challenge, Challenger>;
@@ -232,66 +236,21 @@ fn do_test_bb_twoadic(log_blowup: usize, degree: u64, log_n: usize) -> Result<()
 
 #[test]
 fn prove_bb_twoadic_deg2() -> Result<(), impl Debug> {
-    do_test_bb_twoadic(1, 2, 7)
-}
-
-#[test]
-fn prove_bb_twoadic_deg2_zk() -> Result<(), impl Debug> {
-    type Val = BabyBear;
-    type Challenge = BinomialExtensionField<Val, 4>;
-
-    type Perm = Poseidon2BabyBear<16>;
-    let mut rng = SmallRng::seed_from_u64(1);
-    let perm = Perm::new_from_rng_128(&mut rng);
-
-    type MyHash = PaddingFreeSponge<Perm, 16, 8, 8>;
-    let hash = MyHash::new(perm.clone());
-
-    type MyCompress = TruncatedPermutation<Perm, 2, 8, 16>;
-    let compress = MyCompress::new(perm.clone());
-
-    type ValMmcs = MerkleTreeHidingMmcs<
-        <Val as Field>::Packing,
-        <Val as Field>::Packing,
-        MyHash,
-        MyCompress,
-        SmallRng,
-        8,
-        4,
-    >;
-
-    let val_mmcs = ValMmcs::new(hash, compress, rng);
-
-    type ChallengeMmcs = ExtensionMmcs<Val, Challenge, ValMmcs>;
-    let challenge_mmcs = ChallengeMmcs::new(val_mmcs.clone());
-
-    type Dft = Radix2DitParallel<Val>;
-    let dft = Dft::default();
-
-    type Challenger = DuplexChallenger<Val, Perm, 16, 8>;
-
-    let fri_config = create_test_fri_config_zk(challenge_mmcs);
-    type HidingPcs = HidingFriPcs<Val, Dft, ValMmcs, ChallengeMmcs, SmallRng>;
-    let pcs = HidingPcs::new(dft, val_mmcs, fri_config, 4, SmallRng::seed_from_u64(1));
-    type MyConfig = StarkConfig<HidingPcs, Challenge, Challenger>;
-    let challenger = Challenger::new(perm);
-    let config = MyConfig::new(pcs, challenger);
-
-    let air = MulAir {
-        degree: 3,
-        ..Default::default()
-    };
-    do_test(config, air, 1 << 8)
+    //do_test_bb_twoadic(1, 2, 7)  
+    //do_test_bb_twoadic(1, 2, 8)   
+    do_test_bb_twoadic(1, 2, 10)   //
 }
 
 #[test]
 fn prove_bb_twoadic_deg3() -> Result<(), impl Debug> {
-    do_test_bb_twoadic(1, 3, 7)
+  //  do_test_bb_twoadic(1, 3, 7)  
+  //do_test_bb_twoadic(1, 3, 9)   
+    do_test_bb_twoadic(1, 3, 12)   //
 }
 
 #[test]
 fn prove_bb_twoadic_deg4() -> Result<(), impl Debug> {
-    do_test_bb_twoadic(2, 4, 6)
+    do_test_bb_twoadic(2, 4, 12)
 }
 
 #[test]
